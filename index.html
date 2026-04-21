@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VibeFocus — Enter Your Focus State</title>
+  <meta name="description" content="A premium visual focus timer. Let time fade away. Just stay." />
+  <meta property="og:title" content="VibeFocus — Enter Your Focus State" />
+  <meta property="og:description" content="Replace your boring timer with a calming, visual experience. Ice. Candle. Tree." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Spline 3D interactive background -->
+  <script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.82/build/spline-viewer.js"></script>
+</head>
+<body>
+
+  <!-- ── Global animated gradient background (orbs + vignette) ── -->
+  <div id="gradient-bg" aria-hidden="true">
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="bg-orb bg-orb-3"></div>
+    <div class="bg-vignette"></div>
+  </div>
+
+  <!-- ── Spline 3D interactive scene (landing background) ── -->
+  <spline-viewer
+    id="spline-bg"
+    url="https://prod.spline.design/uWA4RI98Dj0cI651/scene.splinecode"
+    loading="lazy"
+    events-target="global"
+    aria-hidden="true"
+  ></spline-viewer>
+
+  <!-- ── Dark scrim: fades from left (dark) to right (transparent), separates content from Spline ── -->
+  <div id="landing-scrim" aria-hidden="true"></div>
+
+
+  <!-- ── Fade overlay for transitions ── -->
+  <div id="fade-overlay" aria-hidden="true"></div>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 1 · Vibe Selection
+  ══════════════════════════════════════════ -->
+  <section id="screen-vibe" class="screen active" aria-label="Choose your focus vibe">
+    <header class="vibe-header">
+      <p class="app-eyebrow">VibeFocus</p>
+      <p class="app-tagline">Focus isn't tracked. It's experienced.</p>
+    </header>
+
+    <div class="vibe-grid" role="list">
+
+      <button class="vibe-card" id="vibe-ice" data-vibe="ice" role="listitem" aria-label="Select Water Bowl">
+        <div class="card-glow-ring"></div>
+        <div class="vibe-canvas-wrap" aria-hidden="true">
+          <canvas class="vibe-preview" id="preview-ice" width="160" height="180"></canvas>
+        </div>
+        <div class="vibe-label-wrap">
+          <span class="vibe-name">Water Bowl</span>
+          <span class="vibe-sub">Fills drop by drop with time</span>
+        </div>
+      </button>
+
+      <button class="vibe-card" id="vibe-candle" data-vibe="candle" role="listitem" aria-label="Select Candle">
+        <div class="card-glow-ring"></div>
+        <div class="vibe-canvas-wrap" aria-hidden="true">
+          <canvas class="vibe-preview" id="preview-candle" width="160" height="180"></canvas>
+        </div>
+        <div class="vibe-label-wrap">
+          <span class="vibe-name">Candle</span>
+          <span class="vibe-sub">Burns with quiet purpose</span>
+        </div>
+      </button>
+
+      <button class="vibe-card" id="vibe-tree" data-vibe="tree" role="listitem" aria-label="Select Tree">
+        <div class="card-glow-ring"></div>
+        <div class="vibe-canvas-wrap" aria-hidden="true">
+          <canvas class="vibe-preview" id="preview-tree" width="160" height="180"></canvas>
+        </div>
+        <div class="vibe-label-wrap">
+          <span class="vibe-name">Tree</span>
+          <span class="vibe-sub">Leaves fall as minutes pass</span>
+        </div>
+      </button>
+
+    </div>
+
+    <!-- Bottom ambient hint -->
+    <div class="screen-bottom-hint" aria-hidden="true">
+      <div class="hint-line"></div>
+      <div class="hint-dot"></div>
+      <div class="hint-line"></div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 2 · Duration Selection
+  ══════════════════════════════════════════ -->
+  <section id="screen-duration" class="screen" aria-label="Choose session duration">
+    <div class="dur-inner">
+      <button id="btn-back-vibe" class="btn-back" aria-label="Back to vibe selection">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <path d="M19 12H5M12 5l-7 7 7 7"/>
+        </svg>
+        <span>Back</span>
+      </button>
+
+      <div class="dur-header">
+        <p class="dur-eyebrow" id="selected-vibe-label">Water Bowl</p>
+        <h2 class="dur-heading">How deep will you go?</h2>
+      </div>
+
+      <div class="dur-pills" role="group" aria-label="Duration options">
+        <button class="dur-pill" id="dur-25" data-minutes="25" aria-label="25 minutes — Light Focus">
+          <span class="pill-time">25</span><span class="pill-unit">min</span>
+          <span class="pill-tag">Light Focus</span>
+        </button>
+        <button class="dur-pill" id="dur-45" data-minutes="45" aria-label="45 minutes — Deep Focus">
+          <span class="pill-time">45</span><span class="pill-unit">min</span>
+          <span class="pill-tag">Deep Focus</span>
+        </button>
+        <button class="dur-pill" id="dur-60" data-minutes="60" aria-label="60 minutes — Serious Work">
+          <span class="pill-time">60</span><span class="pill-unit">min</span>
+          <span class="pill-tag">Serious Work</span>
+        </button>
+        <button class="dur-pill" id="dur-90" data-minutes="90" aria-label="90 minutes — Extreme Focus">
+          <span class="pill-time">90</span><span class="pill-unit">min</span>
+          <span class="pill-tag">Extreme Focus</span>
+        </button>
+        <!-- Custom timer option -->
+        <button class="dur-pill custom-wide" id="dur-custom" aria-label="Custom duration">
+          <div class="custom-input-group">
+            <input type="number" id="custom-minutes" min="1" max="100" value="10" />
+            <span class="pill-unit">min</span>
+          </div>
+          <span class="pill-tag">Custom</span>
+        </button>
+      </div>
+
+      <button id="btn-start" class="btn-start" disabled aria-label="Start focus session">
+        <span class="btn-start-label">Start Focus</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <div class="btn-start-pulse" aria-hidden="true"></div>
+      </button>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 3 · Focus Mode (immersive)
+  ══════════════════════════════════════════ -->
+  <section id="screen-focus" class="screen" aria-label="Focus session in progress">
+    <canvas id="focus-canvas" aria-hidden="true"></canvas>
+
+    <div id="focus-hud" class="focus-hud">
+      <div class="hud-left">
+        <div class="hud-progress-track" aria-label="Session progress">
+          <div id="hud-progress-fill" class="hud-progress-fill" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+        </div>
+        <span id="hud-time-left" class="hud-time" aria-live="off">25:00</span>
+      </div>
+      <div class="hud-right">
+        <button id="btn-sound" class="btn-hud" aria-label="Toggle ambient sound">
+          <svg id="icon-sound-on"  width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <svg id="icon-sound-off" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+        </button>
+        <button id="btn-exit-focus" class="btn-hud" aria-label="Exit focus session">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       SCREEN 4 · Completion
+  ══════════════════════════════════════════ -->
+  <section id="screen-complete" class="screen" aria-label="Session complete">
+    <canvas id="confetti-canvas" aria-hidden="true"></canvas>
+    <div class="complete-inner">
+      <div class="complete-trophy" aria-hidden="true">
+        <span class="trophy-emoji">🏆</span>
+        <div class="trophy-aura"></div>
+      </div>
+      <h2 class="complete-heading">You stayed till the end.</h2>
+      <p class="complete-sub">That's rare. Well done.</p>
+      <div class="complete-stat-card">
+        <span class="stat-label">Total Focus Time</span>
+        <span class="stat-value" id="complete-time-display">25 minutes</span>
+      </div>
+      <button id="btn-restart" class="btn-restart" aria-label="Begin a new focus session">
+        <span>Begin Again</span>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
+        </svg>
+      </button>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>
