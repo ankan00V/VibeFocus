@@ -5,6 +5,16 @@
 
 'use strict';
 
+/* ── Mobile detection & adaptive quality ──────────────── */
+const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+               || window.innerWidth <= 768;
+// Cap DPR to 1.5 on mobile to halve pixel fill cost
+const RENDER_DPR = IS_MOBILE ? Math.min(window.devicePixelRatio || 1, 1.5)
+                             : (window.devicePixelRatio || 1);
+// Target 30fps on mobile (≈33ms), 60fps on desktop
+const TARGET_FRAME_MS = IS_MOBILE ? 33 : 0;
+let   _lastFocusFrame = 0;
+
 /* ── State ─────────────────────────────────────────────── */
 const state = {
   vibe:         null,
@@ -194,14 +204,20 @@ async function launchFocus() {
 }
 
 function tickFocus(now) {
+  // Mobile frame throttle: skip frame if not enough time has passed
+  if (IS_MOBILE && now - _lastFocusFrame < TARGET_FRAME_MS) {
+    state.rafId = requestAnimationFrame(tickFocus);
+    return;
+  }
+  _lastFocusFrame = now;
+
   const elapsed  = Math.min((now - state.startTime) / 1000, state.totalSeconds);
   const prog = elapsed / state.totalSeconds;
 
-  resizeFocusCanvas();
+  // NOTE: resizeFocusCanvas() NOT called every frame — only on resize event
 
   // Draw
-  const dpr = window.devicePixelRatio || 1;
-  drawVibe(focusCtx, focusCanvas.width / dpr, focusCanvas.height / dpr, prog, state.vibe, now / 1000);
+  drawVibe(focusCtx, focusCanvas.width / RENDER_DPR, focusCanvas.height / RENDER_DPR, prog, state.vibe, now / 1000);
 
   // HUD
   const remaining = Math.max(0, state.totalSeconds - elapsed);
@@ -261,12 +277,12 @@ btnRestart.addEventListener('click', () => {
    Canvas resize
 ══════════════════════════════════════════════════════════ */
 function resizeFocusCanvas() {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = RENDER_DPR;
   const w   = window.innerWidth;
   const h   = window.innerHeight;
-  if (focusCanvas.width !== w * dpr || focusCanvas.height !== h * dpr) {
-    focusCanvas.width  = w * dpr;
-    focusCanvas.height = h * dpr;
+  if (focusCanvas.width !== Math.round(w * dpr) || focusCanvas.height !== Math.round(h * dpr)) {
+    focusCanvas.width  = Math.round(w * dpr);
+    focusCanvas.height = Math.round(h * dpr);
     focusCanvas.style.width  = w + 'px';
     focusCanvas.style.height = h + 'px';
     focusCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -360,24 +376,36 @@ function waterReset() {
   }));
 }
 
+// Cached gradient keys to avoid recreating every frame
+const _gradCache = {};
+function cachedLinear(ctx, key, x0, y0, x1, y1, stops) {
+  // Re-use gradient if canvas size hasn't changed
+  if (_gradCache[key]) return _gradCache[key];
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  stops.forEach(([t, c]) => g.addColorStop(t, c));
+  _gradCache[key] = g;
+  return g;
+}
+// Invalidate cache on resize
+window.addEventListener('resize', () => { Object.keys(_gradCache).forEach(k => delete _gradCache[k]); });
+
 function drawWaterBowl(ctx, W, H, p, time) {
   const cx = W / 2;
 
   if (!WATER.initd) waterReset();
 
   // ── Background ──
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0,   '#020510');
-  bg.addColorStop(0.6, '#03070f');
-  bg.addColorStop(1,   '#010305');
+  const bg = cachedLinear(ctx, 'wb_bg', 0, 0, 0, H, [[0,'#020510'],[0.6,'#03070f'],[1,'#010305']]);
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
-  // Soft downward spotlight (where drops originate)
-  const spot = ctx.createRadialGradient(cx, H * 0.1, 10, cx, H * 0.35, H * 0.65);
-  spot.addColorStop(0, 'rgba(90,150,220,0.11)');
-  spot.addColorStop(0.5,'rgba(50,100,190,0.04)');
-  spot.addColorStop(1, 'transparent');
-  ctx.fillStyle = spot; ctx.fillRect(0, 0, W, H);
+  // Soft downward spotlight — skip on mobile (expensive radial)
+  if (!IS_MOBILE) {
+    const spot = ctx.createRadialGradient(cx, H * 0.1, 10, cx, H * 0.35, H * 0.65);
+    spot.addColorStop(0, 'rgba(90,150,220,0.11)');
+    spot.addColorStop(0.5,'rgba(50,100,190,0.04)');
+    spot.addColorStop(1, 'transparent');
+    ctx.fillStyle = spot; ctx.fillRect(0, 0, W, H);
+  }
 
   // ── Bowl geometry ──
   const isPreview = W < 300;
@@ -444,8 +472,8 @@ function drawWaterBowl(ctx, W, H, p, time) {
     ctx.fillStyle = rdg;
     ctx.fillRect(cx, waterTopY, rimRx, waterH + 5);
 
-    // Caustic blobs (light rippling through water)
-    if (fillFrac > 0.08 && !isPreview) {
+    // Caustic blobs (light rippling through water) — skip on mobile
+    if (fillFrac > 0.08 && !isPreview && !IS_MOBILE) {
       WATER.caustics.forEach(c => {
         const cx2 = cx + (c.rx - 0.5) * rimRx * 1.35;
         const cy2 = waterTopY + c.ry * waterH;
@@ -470,7 +498,7 @@ function drawWaterBowl(ctx, W, H, p, time) {
     bowlInnerPath();
     ctx.clip();
 
-    const steps = isPreview ? 20 : 48;
+    const steps = isPreview ? 16 : (IS_MOBILE ? 28 : 48);
     const surfW  = irx - ilx;
 
     // Surface shimmer band
@@ -487,19 +515,21 @@ function drawWaterBowl(ctx, W, H, p, time) {
     ctx.lineWidth = 1.6;
     ctx.stroke();
 
-    // Top specular glint
-    ctx.beginPath();
-    for (let i = 0; i <= steps; i++) {
-      const sx  = ilx + surfW * (i / steps);
-      const wvy = waterTopY - 1.5
-        + sin(i * 0.65 + time * 2.3) * (1.8 + waveAmp * 7)
-        + sin(i * 1.45 - time * 1.7) * (0.9 + waveAmp * 3.5)
-        + sin(i * 0.28 + time * 0.85) * 1.2;
-      if (i === 0) ctx.moveTo(sx, wvy); else ctx.lineTo(sx, wvy);
+    // Top specular glint — skip on mobile
+    if (!IS_MOBILE) {
+      ctx.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const sx  = ilx + surfW * (i / steps);
+        const wvy = waterTopY - 1.5
+          + sin(i * 0.65 + time * 2.3) * (1.8 + waveAmp * 7)
+          + sin(i * 1.45 - time * 1.7) * (0.9 + waveAmp * 3.5)
+          + sin(i * 0.28 + time * 0.85) * 1.2;
+        if (i === 0) ctx.moveTo(sx, wvy); else ctx.lineTo(sx, wvy);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 0.85;
+      ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-    ctx.lineWidth = 0.85;
-    ctx.stroke();
     ctx.restore();
 
     // ── Ripple rings (on water surface) ──
@@ -725,8 +755,8 @@ function drawWaterBowl(ctx, W, H, p, time) {
     ctx.restore();
   });
 
-  // ── Spotlight beam ──
-  if (!isPreview) {
+  // ── Spotlight beam — skip on mobile ──
+  if (!isPreview && !IS_MOBILE) {
     const beam = ctx.createLinearGradient(0, 0, 0, H * 0.78);
     beam.addColorStop(0, 'rgba(95,155,220,0.06)');
     beam.addColorStop(1, 'transparent');
@@ -780,11 +810,17 @@ function drawCandle(ctx, W, H, p, time) {
 
   // ── Background ──
   const warmth = Math.max(0.04, 0.5 - p * 0.4);
-  const bg = ctx.createRadialGradient(cx, H * 0.52, 10, cx, H * 0.52, H * 0.95);
-  bg.addColorStop(0, isPreview ? `rgba(58,32,6,0.2)` : `rgba(58,32,6,${warmth})`);
-  bg.addColorStop(0.5, isPreview ? `rgba(28,14,2,0.1)` : `rgba(28,14,2,${warmth * 0.8})`);
-  bg.addColorStop(1,   '#030200');
-  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  // On mobile, use a simpler static dark background to avoid per-frame gradient creation
+  if (IS_MOBILE) {
+    ctx.fillStyle = '#030200';
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    const bg = ctx.createRadialGradient(cx, H * 0.52, 10, cx, H * 0.52, H * 0.95);
+    bg.addColorStop(0, isPreview ? `rgba(58,32,6,0.2)` : `rgba(58,32,6,${warmth})`);
+    bg.addColorStop(0.5, isPreview ? `rgba(28,14,2,0.1)` : `rgba(28,14,2,${warmth * 0.8})`);
+    bg.addColorStop(1,   '#030200');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  }
 
   // ── 1. Candle Height Reduction (Independent) ──
   const candleW  = isPreview ? W * 0.32 : clamp(W * 0.088, 42, 86);
@@ -937,22 +973,24 @@ function drawFlame(ctx, x, tipY, p, time, strength = 1) {
   const fH  = (42 + f3 * 8 + f1 * 4) * flickerH * strength * endScale;
   const fW  = (14 + f2 * 3) * strength * endScale;
 
-  // Outer atmospheric haze (flickers in size)
-  const hazeR = fW * (3.5 + f1 * 0.5);
-  const og = ctx.createRadialGradient(fx, tipY - fH * 0.3, 0, fx, tipY - fH * 0.3, hazeR);
-  og.addColorStop(0, `rgba(255,165,40,${0.18 * strength * endScale})`);
-  og.addColorStop(0.5,'rgba(200,80,10,0.05)');
-  og.addColorStop(1, 'transparent');
-  ctx.fillStyle = og;
-  ctx.fillRect(0, 0, ctx.canvas.width / (window.devicePixelRatio||1),
-                     ctx.canvas.height / (window.devicePixelRatio||1));
+  // Outer atmospheric haze (flickers in size) — skip on mobile
+  if (!IS_MOBILE) {
+    const hazeR = fW * (3.5 + f1 * 0.5);
+    const og = ctx.createRadialGradient(fx, tipY - fH * 0.3, 0, fx, tipY - fH * 0.3, hazeR);
+    og.addColorStop(0, `rgba(255,165,40,${0.18 * strength * endScale})`);
+    og.addColorStop(0.5,'rgba(200,80,10,0.05)');
+    og.addColorStop(1, 'transparent');
+    ctx.fillStyle = og;
+    ctx.fillRect(0, 0, ctx.canvas.width / (window.devicePixelRatio||1),
+                       ctx.canvas.height / (window.devicePixelRatio||1));
 
-  // Secondary glow layer (adds depth)
-  const og2 = ctx.createRadialGradient(fx, tipY - fH * 0.15, 0, fx, tipY - fH * 0.5, fH * 1.3);
-  og2.addColorStop(0, `rgba(255,210,80,${0.25 * strength * endScale})`);
-  og2.addColorStop(1, 'transparent');
-  ctx.fillStyle = og2;
-  ctx.beginPath(); ctx.ellipse(fx, tipY - fH * 0.35, fW * 2, fH * 1.2, 0, 0, PI * 2); ctx.fill();
+    // Secondary glow layer (adds depth)
+    const og2 = ctx.createRadialGradient(fx, tipY - fH * 0.15, 0, fx, tipY - fH * 0.5, fH * 1.3);
+    og2.addColorStop(0, `rgba(255,210,80,${0.25 * strength * endScale})`);
+    og2.addColorStop(1, 'transparent');
+    ctx.fillStyle = og2;
+    ctx.beginPath(); ctx.ellipse(fx, tipY - fH * 0.35, fW * 2, fH * 1.2, 0, 0, PI * 2); ctx.fill();
+  }
 
   // Main flame body — asymmetric bezier (non-uniform)
   const fg = ctx.createRadialGradient(fx, tipY - fH * 0.2, 1, fx, tipY - fH * 0.6, fH);
@@ -994,7 +1032,7 @@ function drawFlame(ctx, x, tipY, p, time, strength = 1) {
    TREE — Realistic leaf-shedding simulation
 ══════════════════════════════════════════════════════════ */
 
-const LEAF_N = 160;
+const LEAF_N = IS_MOBILE ? 80 : 160;
 const leaves = [];
 const groundPile = []; // permanent ground leaf positions
 
@@ -1101,10 +1139,11 @@ function drawTree(ctx, W, H, p, time) {
   }
   ctx.lineTo(W, H); ctx.lineTo(0, H); ctx.closePath(); ctx.fill();
 
-  // Ambient forest motes (tiny floating spores/pollen) — only in full session
+  // Ambient forest motes (tiny floating spores/pollen) — only in full session, reduced on mobile
   if (!isPreview && p > 0.02) {
+    const MOTE_COUNT = IS_MOBILE ? 15 : 35;
     if (!drawTree._motes) {
-      drawTree._motes = Array.from({length: 35}, () => ({
+      drawTree._motes = Array.from({length: MOTE_COUNT}, () => ({
         x: Math.random(), y: Math.random(),
         vx: (Math.random() - 0.5) * 0.004,
         vy: -(0.003 + Math.random() * 0.006),
@@ -1112,6 +1151,7 @@ function drawTree(ctx, W, H, p, time) {
         alpha: 0.06 + Math.random() * 0.16,
         phase: Math.random() * PI * 2,
         speed: 0.2 + Math.random() * 0.6,
+        color: Math.random() < 0.5 ? '#a8d870' : '#c8a858',
       }));
     }
     drawTree._motes.forEach(m => {
@@ -1122,7 +1162,7 @@ function drawTree(ctx, W, H, p, time) {
       if (m.x >  1.05) m.x = -0.02;
       ctx.save();
       ctx.globalAlpha = m.alpha * (0.5 + 0.5 * sin(time * m.speed + m.phase));
-      ctx.fillStyle = Math.random() < 0.5 ? '#a8d870' : '#c8a858';
+      ctx.fillStyle = m.color;  // pre-assigned, avoid Math.random() per frame
       ctx.beginPath();
       ctx.arc(m.x * W, m.y * H, m.r, 0, PI * 2);
       ctx.fill();
@@ -1368,25 +1408,28 @@ function drawLeaf(ctx, x, y, size, color, rot, alpha) {
   );
   ctx.fill();
 
-  // Translucent overlay for depth
-  ctx.globalAlpha = clamp(alpha * 0.18, 0, 0.18);
-  ctx.fillStyle = 'rgba(255,255,200,0.4)';
-  ctx.beginPath();
-  ctx.ellipse(-size * 0.15, -size * 0.1, size * 0.28, size * 0.55, -0.3, 0, PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = clamp(alpha, 0, 1);
+  // Skip expensive overlay and veins on mobile for performance
+  if (!IS_MOBILE) {
+    // Translucent overlay for depth
+    ctx.globalAlpha = clamp(alpha * 0.18, 0, 0.18);
+    ctx.fillStyle = 'rgba(255,255,200,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(-size * 0.15, -size * 0.1, size * 0.28, size * 0.55, -0.3, 0, PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = clamp(alpha, 0, 1);
 
-  // Central vein
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 0.6; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(0, -size * 0.8); ctx.lineTo(0, size * 0.8); ctx.stroke();
-  // Side veins
-  ctx.lineWidth = 0.35; ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-  [-0.5, -0.2, 0.15, 0.45].forEach(t => {
-    const vx = size * t * 0.6;
-    const vy = size * t;
-    ctx.beginPath(); ctx.moveTo(0, vy); ctx.lineTo(vx, vy - size * 0.12); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, vy); ctx.lineTo(-vx, vy - size * 0.12); ctx.stroke();
-  });
+    // Central vein
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 0.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, -size * 0.8); ctx.lineTo(0, size * 0.8); ctx.stroke();
+    // Side veins
+    ctx.lineWidth = 0.35; ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+    [-0.5, -0.2, 0.15, 0.45].forEach(t => {
+      const vx = size * t * 0.6;
+      const vy = size * t;
+      ctx.beginPath(); ctx.moveTo(0, vy); ctx.lineTo(vx, vy - size * 0.12); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, vy); ctx.lineTo(-vx, vy - size * 0.12); ctx.stroke();
+    });
+  }
   ctx.restore();
 }
 
@@ -1396,8 +1439,9 @@ function drawLeaf(ctx, x, y, size, color, rot, alpha) {
 // Preview canvases loop slowly at ~15% melt progress to show the animation
 let previewRaf       = null;
 let previewLastFrame = 0;
-const PREVIEW_FPS      = 22;
-const PREVIEW_INTERVAL = 1000 / PREVIEW_FPS;   // ~45ms per frame
+// On mobile preview runs at 15fps to save battery and GPU
+const PREVIEW_FPS      = IS_MOBILE ? 15 : 22;
+const PREVIEW_INTERVAL = 1000 / PREVIEW_FPS;
 
 const previews = {
   ice:    { canvas: $('preview-ice'),    ctx: null },

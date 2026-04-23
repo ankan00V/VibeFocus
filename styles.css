@@ -1096,6 +1096,13 @@ body:has(#screen-vibe.active) #spline-bg {
   /* Ensure the main focus character is visible by default */
 }
 
+/* Hide Spline 3D on mobile — WebGL is too heavy for mobile GPUs */
+@media (max-width: 768px) and (pointer: coarse) {
+  #spline-bg {
+    display: none !important;
+  }
+}
+
 /* ── Screen layout ── */
 #screen-vibe.active {
   display: flex;
@@ -1336,5 +1343,119 @@ body:has(#screen-vibe.active) #spline-bg {
   .btn-start {
     width: 100%;
     padding: 1.1rem 2rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   MOBILE PERFORMANCE CRITICAL FIXES
+   Disable backdrop-filter, heavy animations, complex gradients on touch devices
+══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) and (pointer: coarse) {
+  /* ── Kill backdrop-filter: the #1 GPU killer on mobile ── */
+  .vibe-card,
+  #screen-vibe .vibe-card,
+  .dur-pill,
+  .btn-back,
+  .btn-hud,
+  .btn-restart,
+  .complete-stat-card,
+  .app-tagline {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Replace blurred glass with solid semi-transparent backgrounds */
+  .vibe-card,
+  #screen-vibe .vibe-card {
+    background: rgba(15, 15, 22, 0.88) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .dur-pill {
+    background: rgba(15, 15, 22, 0.85) !important;
+  }
+
+  .btn-back {
+    background: rgba(15, 15, 22, 0.8) !important;
+  }
+
+  .btn-hud {
+    background: rgba(10, 10, 16, 0.75) !important;
+  }
+
+  .complete-stat-card {
+    background: rgba(15, 15, 22, 0.9) !important;
+  }
+
+  .app-tagline {
+    background: rgba(10, 10, 18, 0.85) !important;
+  }
+
+  .btn-restart {
+    background: rgba(30, 30, 45, 0.88) !important;
+  }
+
+  /* ── Stop orb CSS animations — running 3 animations simultaneously is costly ── */
+  #gradient-bg::after {
+    animation: none !important;
+  }
+  .bg-orb-2,
+  .bg-orb-3 {
+    animation: none !important;
+  }
+
+  /* ── Stop card float animation — running per card (3x) ── */
+  .vibe-card {
+    animation: none !important;
+  }
+
+  /* ── Simplify breathe animation on start button ── */
+  .btn-start:not(:disabled) {
+    animation: none !important;
+    box-shadow:
+      0 0 0 1px rgba(124, 58, 237, 0.3),
+      0 0 24px rgba(124, 58, 237, 0.35),
+      0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+  .btn-start-pulse {
+    animation: none !important;
+    display: none;
+  }
+
+  /* ── Remove will-change from elements not actively animating ── */
+  .bg-orb,
+  .screen {
+    will-change: auto;
+  }
+
+  /* ── Simplify card glow ring shadows ── */
+  #vibe-ice .card-glow-ring,
+  #vibe-candle .card-glow-ring,
+  #vibe-tree .card-glow-ring {
+    box-shadow: 0 0 20px 4px rgba(255,255,255,0.08) !important;
+  }
+
+  /* ── Disable screen transition transform — opacity only is cheaper ── */
+  .screen {
+    transform: none;
+    transition: opacity 0.45s ease;
+  }
+  .screen.active {
+    transform: none;
+  }
+
+  /* ── Simpler trophy animaton ── */
+  .trophy-emoji {
+    animation: trophy-float 5s ease-in-out infinite;
+  }
+  .trophy-aura {
+    animation: none;
+    opacity: 0.6;
+    transform: scale(1);
+  }
+
+  /* ── Simplify progress bar glow ── */
+  .hud-progress-fill {
+    box-shadow: none;
   }
 }
