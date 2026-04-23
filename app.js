@@ -1550,10 +1550,10 @@ function tickConfetti() {
 }
 
 /* ==============================================================
-   AUDIO — Hybrid Ambient Soundscapes
-     Rain (Water Bowl) -> real audio file (sounds/rain.wav)
-     Fire (Candle)     -> real audio file (sounds/fire.wav)
-     Wind (Tree)       -> procedural Web Audio API synthesis
+   AUDIO — Premium Ambient Soundscapes (file-based)
+     Rain (Water Bowl) -> sounds/rain.wav
+     Fire (Candle)     -> sounds/fire.wav
+     Wind (Tree)       -> sounds/wind.wav
 ============================================================== */
 function initAudioCtx() {
   if (!state.audioCtx) {
@@ -1563,9 +1563,7 @@ function initAudioCtx() {
 }
 
 function stopAllSound() {
-  if (state._chirpTimer) { clearInterval(state._chirpTimer); state._chirpTimer = null; }
-
-  // Stop HTML Audio element (rain & fire)
+  // Stop HTML Audio element
   if (state._ambientAudio) {
     state._ambientAudio.pause();
     state._ambientAudio.src = '';
@@ -1573,7 +1571,7 @@ function stopAllSound() {
   }
   if (state._fadeTimer) { clearInterval(state._fadeTimer); state._fadeTimer = null; }
 
-  // Stop Web Audio API nodes (forest breeze)
+  // Stop any remaining Web Audio nodes
   Object.values(state.audioNodes).forEach(n => {
     try { n.stop && n.stop(); }   catch(e) {}
     try { n.disconnect && n.disconnect(); } catch(e) {}
@@ -1585,16 +1583,9 @@ function startAmbient(vibe) {
   initAudioCtx();
   stopAllSound();
 
-  if (vibe === 'ice')    { playAmbientFile('sounds/rain.wav'); return; }
-  if (vibe === 'candle') { playAmbientFile('sounds/fire.wav'); return; }
-
-  const ctx  = state.audioCtx;
-  const master = ctx.createGain();
-  master.gain.setValueAtTime(0, ctx.currentTime);
-  master.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 3.0);
-  master.connect(ctx.destination);
-  state.audioNodes.master = master;
-  if (vibe === 'tree') buildForestBreeze(ctx, master);
+  if (vibe === 'ice')    playAmbientFile('sounds/rain.wav');
+  if (vibe === 'candle') playAmbientFile('sounds/fire.wav');
+  if (vibe === 'tree')   playAmbientFile('sounds/wind.wav');
 }
 
 function playAmbientFile(src) {
@@ -1627,120 +1618,6 @@ function playAmbientFile(src) {
       audio.play().then(fadeIn).catch(() => {});
     }
   }, 500);
-}
-
-function noise(ctx, seconds = 4) {
-  const len = ctx.sampleRate * seconds;
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const d   = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-  const src = ctx.createBufferSource();
-  src.buffer = buf; src.loop = true; src.start();
-  return src;
-}
-
-function pinkNoise(ctx, seconds = 4) {
-  const len = ctx.sampleRate * seconds;
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const d   = buf.getChannelData(0);
-  let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
-  for (let i = 0; i < len; i++) {
-    const white = Math.random() * 2 - 1;
-    b0 = 0.99886*b0 + white*0.0555179;
-    b1 = 0.99332*b1 + white*0.0750759;
-    b2 = 0.96900*b2 + white*0.1538520;
-    b3 = 0.86650*b3 + white*0.3104856;
-    b4 = 0.55000*b4 + white*0.5329522;
-    b5 = -0.7616*b5 - white*0.0168980;
-    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white*0.5362) * 0.11;
-    b6 = white * 0.115926;
-  }
-  const src = ctx.createBufferSource();
-  src.buffer = buf; src.loop = true; src.start();
-  return src;
-}
-
-function biquad(ctx, type, freq, Q = 1) {
-  const f = ctx.createBiquadFilter();
-  f.type = type; f.frequency.value = freq; f.Q.value = Q;
-  return f;
-}
-
-function buildForestBreeze(ctx, dest) {
-  const wind   = pinkNoise(ctx, 6);
-  const windBP = biquad(ctx, 'bandpass', 450, 0.3);
-  const windLP = biquad(ctx, 'lowpass', 2000, 0.5);
-  const windG  = ctx.createGain(); windG.gain.value = 0.45;
-  wind.connect(windBP); windBP.connect(windLP); windLP.connect(windG); windG.connect(dest);
-  state.audioNodes.wind = wind;
-
-  const gustLFO  = ctx.createOscillator(); gustLFO.frequency.value = 0.05;
-  const gustLFOG = ctx.createGain(); gustLFOG.gain.value = 0.12;
-  gustLFO.connect(gustLFOG); gustLFOG.connect(windG.gain); gustLFO.start();
-  state.audioNodes.gustLFO = gustLFO;
-
-  const gustLFO2  = ctx.createOscillator(); gustLFO2.frequency.value = 0.028;
-  const gustLFO2G = ctx.createGain(); gustLFO2G.gain.value = 0.07;
-  gustLFO2.connect(gustLFO2G); gustLFO2G.connect(windG.gain); gustLFO2.start();
-  state.audioNodes.gustLFO2 = gustLFO2;
-
-  const rustle   = noise(ctx, 3);
-  const rustleBP = biquad(ctx, 'bandpass', 3800, 1.5);
-  const rustleG  = ctx.createGain(); rustleG.gain.value = 0.15;
-  rustle.connect(rustleBP); rustleBP.connect(rustleG); rustleG.connect(dest);
-  state.audioNodes.rustle = rustle;
-
-  const rustleLFO  = ctx.createOscillator(); rustleLFO.frequency.value = 0.07;
-  const rustleLFOG = ctx.createGain(); rustleLFOG.gain.value = 0.06;
-  rustleLFO.connect(rustleLFOG); rustleLFOG.connect(rustleG.gain); rustleLFO.start();
-  state.audioNodes.rustleLFO = rustleLFO;
-
-  const hum   = noise(ctx, 8);
-  const humLP = biquad(ctx, 'lowpass', 120, 0.4);
-  const humG  = ctx.createGain(); humG.gain.value = 0.18;
-  hum.connect(humLP); humLP.connect(humG); humG.connect(dest);
-  state.audioNodes.hum = hum;
-
-  [220, 330, 392].forEach((freq, i) => {
-    const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq;
-    const g   = ctx.createGain(); g.gain.value = 0.012;
-    osc.connect(g); g.connect(dest); osc.start();
-    state.audioNodes['tone' + i] = osc;
-    const toneLFO  = ctx.createOscillator(); toneLFO.frequency.value = 0.03 + i * 0.015;
-    const toneLFOG = ctx.createGain(); toneLFOG.gain.value = 0.004;
-    toneLFO.connect(toneLFOG); toneLFOG.connect(g.gain); toneLFO.start();
-    state.audioNodes['toneLFO' + i] = toneLFO;
-  });
-
-  state._chirpTimer = setInterval(() => {
-    if (!state.audioCtx || state.audioCtx.state === 'closed') return;
-    if (Math.random() > 0.5) return;
-    const now = ctx.currentTime;
-    const chirp = ctx.createOscillator(); chirp.type = 'sine';
-    const baseFreq = 2800 + Math.random() * 1800;
-    chirp.frequency.setValueAtTime(baseFreq, now);
-    chirp.frequency.exponentialRampToValueAtTime(baseFreq * (1.15 + Math.random() * 0.3), now + 0.06);
-    chirp.frequency.exponentialRampToValueAtTime(baseFreq * 0.9, now + 0.12);
-    const chirpG = ctx.createGain();
-    chirpG.gain.setValueAtTime(0, now);
-    chirpG.gain.linearRampToValueAtTime(0.012 + Math.random() * 0.008, now + 0.02);
-    chirpG.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-    chirp.connect(chirpG); chirpG.connect(dest);
-    chirp.start(now); chirp.stop(now + 0.18);
-
-    if (Math.random() > 0.4) {
-      const chirp2 = ctx.createOscillator(); chirp2.type = 'sine';
-      const f2 = baseFreq * (0.8 + Math.random() * 0.5);
-      chirp2.frequency.setValueAtTime(f2, now + 0.18);
-      chirp2.frequency.exponentialRampToValueAtTime(f2 * 1.1, now + 0.24);
-      const chirp2G = ctx.createGain();
-      chirp2G.gain.setValueAtTime(0, now + 0.16);
-      chirp2G.gain.linearRampToValueAtTime(0.008 + Math.random() * 0.006, now + 0.20);
-      chirp2G.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
-      chirp2.connect(chirp2G); chirp2G.connect(dest);
-      chirp2.start(now + 0.16); chirp2.stop(now + 0.35);
-    }
-  }, 4000 + Math.random() * 4000);
 }
 
 
