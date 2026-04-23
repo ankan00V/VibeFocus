@@ -1550,7 +1550,11 @@ function tickConfetti() {
 }
 
 /* ══════════════════════════════════════════════════════════
-   AUDIO — Web Audio API procedural ambient
+   AUDIO — Premium Procedural Ambient Soundscapes
+   Each vibe has a rich multi-layer synthesis:
+     • Rain (Water Bowl) — gentle patter, soft distant thunder, water drips
+     • Fire (Candle)     — warm crackle, low roar, random pops, wood settling
+     • Wind (Tree)       — forest breeze, leaf rustle, organic sway, soft chirps
 ══════════════════════════════════════════════════════════ */
 function initAudioCtx() {
   if (!state.audioCtx) {
@@ -1560,6 +1564,11 @@ function initAudioCtx() {
 }
 
 function stopAllSound() {
+  // Clear scheduled drip/crackle intervals
+  if (state._dripTimer)    { clearInterval(state._dripTimer);    state._dripTimer = null; }
+  if (state._crackleTimer) { clearInterval(state._crackleTimer); state._crackleTimer = null; }
+  if (state._chirpTimer)   { clearInterval(state._chirpTimer);   state._chirpTimer = null; }
+
   Object.values(state.audioNodes).forEach(n => {
     try { n.stop && n.stop(); }   catch(e) {}
     try { n.disconnect && n.disconnect(); } catch(e) {}
@@ -1573,20 +1582,60 @@ function startAmbient(vibe) {
   const ctx  = state.audioCtx;
   const master = ctx.createGain();
   master.gain.setValueAtTime(0, ctx.currentTime);
-  master.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 2.5);
+  // Premium slow fade-in (3.5 seconds)
+  master.gain.linearRampToValueAtTime(0.45, ctx.currentTime + 3.5);
   master.connect(ctx.destination);
   state.audioNodes.master = master;
 
-  if (vibe === 'ice')    buildIce(ctx, master);
-  if (vibe === 'candle') buildFire(ctx, master);
-  if (vibe === 'tree')   buildForest(ctx, master);
+  if (vibe === 'ice')    buildRain(ctx, master);
+  if (vibe === 'candle') buildBonfire(ctx, master);
+  if (vibe === 'tree')   buildForestBreeze(ctx, master);
 }
 
-function noise(ctx, buffer_seconds = 4) {
-  const len = ctx.sampleRate * buffer_seconds;
+/* ── Utility: noise buffer source ── */
+function noise(ctx, seconds = 4) {
+  const len = ctx.sampleRate * seconds;
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
   const d   = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.loop = true; src.start();
+  return src;
+}
+
+/* ── Utility: brown noise (more natural than white) ── */
+function brownNoise(ctx, seconds = 4) {
+  const len = ctx.sampleRate * seconds;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d   = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < len; i++) {
+    const white = Math.random() * 2 - 1;
+    last = (last + (0.02 * white)) / 1.02;
+    d[i] = last * 3.5; // normalize
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf; src.loop = true; src.start();
+  return src;
+}
+
+/* ── Utility: pink noise ── */
+function pinkNoise(ctx, seconds = 4) {
+  const len = ctx.sampleRate * seconds;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d   = buf.getChannelData(0);
+  let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
+  for (let i = 0; i < len; i++) {
+    const white = Math.random() * 2 - 1;
+    b0 = 0.99886*b0 + white*0.0555179;
+    b1 = 0.99332*b1 + white*0.0750759;
+    b2 = 0.96900*b2 + white*0.1538520;
+    b3 = 0.86650*b3 + white*0.3104856;
+    b4 = 0.55000*b4 + white*0.5329522;
+    b5 = -0.7616*b5 - white*0.0168980;
+    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white*0.5362) * 0.11;
+    b6 = white * 0.115926;
+  }
   const src = ctx.createBufferSource();
   src.buffer = buf; src.loop = true; src.start();
   return src;
@@ -1598,66 +1647,258 @@ function biquad(ctx, type, freq, Q = 1) {
   return f;
 }
 
-function buildIce(ctx, dest) {
-  // wind — bandpass white noise
-  const n1  = noise(ctx);
-  const bp1 = biquad(ctx, 'bandpass', 800, 0.4);
-  const g1  = ctx.createGain(); g1.gain.value = 0.22;
-  n1.connect(bp1); bp1.connect(g1); g1.connect(dest);
-  state.audioNodes.n1 = n1;
+/* ══════════════════════════════════════════════════════════
+   🌧️ RAIN — Calming rain on water (for Water Bowl mode)
+   Layers: steady rain bed, high patter, low distant rumble,
+           random water drip impacts, deep sub-bass
+══════════════════════════════════════════════════════════ */
+function buildRain(ctx, dest) {
+  const t = ctx.currentTime;
 
-  // low drone
-  const osc = ctx.createOscillator();
-  osc.type = 'sine'; osc.frequency.value = 52;
-  const gOsc = ctx.createGain(); gOsc.gain.value = 0.1;
-  osc.connect(gOsc); gOsc.connect(dest); osc.start();
-  state.audioNodes.osc = osc;
+  // ── Layer 1: Steady rain bed (brown noise → bandpass = realistic patter) ──
+  const rainBed = brownNoise(ctx, 6);
+  const rainBP  = biquad(ctx, 'bandpass', 2200, 0.5);
+  const rainLP  = biquad(ctx, 'lowpass', 6000, 0.7);
+  const rainG   = ctx.createGain(); rainG.gain.value = 0.38;
+  rainBed.connect(rainBP); rainBP.connect(rainLP); rainLP.connect(rainG); rainG.connect(dest);
+  state.audioNodes.rainBed = rainBed;
 
-  // LFO on wind volume
-  const lfo = ctx.createOscillator(); lfo.frequency.value = 0.09;
-  const lfoG = ctx.createGain(); lfoG.gain.value = 0.1;
-  lfo.connect(lfoG); lfoG.connect(g1.gain); lfo.start();
-  state.audioNodes.lfo = lfo;
+  // ── Layer 2: High-frequency rain sparkle (light drops on surface) ──
+  const sparkle   = noise(ctx, 3);
+  const sparkBP   = biquad(ctx, 'bandpass', 5500, 1.2);
+  const sparkG    = ctx.createGain(); sparkG.gain.value = 0.08;
+  sparkle.connect(sparkBP); sparkBP.connect(sparkG); sparkG.connect(dest);
+  state.audioNodes.sparkle = sparkle;
+
+  // Gentle LFO on sparkle volume for organic feel
+  const sparkLFO  = ctx.createOscillator(); sparkLFO.frequency.value = 0.12;
+  const sparkLFOG = ctx.createGain(); sparkLFOG.gain.value = 0.03;
+  sparkLFO.connect(sparkLFOG); sparkLFOG.connect(sparkG.gain); sparkLFO.start();
+  state.audioNodes.sparkLFO = sparkLFO;
+
+  // ── Layer 3: Low distant rumble (like rain on a roof, barely there) ──
+  const rumble   = brownNoise(ctx, 8);
+  const rumbleLP = biquad(ctx, 'lowpass', 180, 0.6);
+  const rumbleG  = ctx.createGain(); rumbleG.gain.value = 0.14;
+  rumble.connect(rumbleLP); rumbleLP.connect(rumbleG); rumbleG.connect(dest);
+  state.audioNodes.rumble = rumble;
+
+  // Slow breathing swell on the rumble
+  const rumbleLFO  = ctx.createOscillator(); rumbleLFO.frequency.value = 0.04;
+  const rumbleLFOG = ctx.createGain(); rumbleLFOG.gain.value = 0.06;
+  rumbleLFO.connect(rumbleLFOG); rumbleLFOG.connect(rumbleG.gain); rumbleLFO.start();
+  state.audioNodes.rumbleLFO = rumbleLFO;
+
+  // ── Layer 4: Sub-bass presence (warmth, like indoor rain feeling) ──
+  const sub = ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = 42;
+  const subG = ctx.createGain(); subG.gain.value = 0.06;
+  sub.connect(subG); subG.connect(dest); sub.start();
+  state.audioNodes.sub = sub;
+
+  // ── Layer 5: Random water drip impacts (scheduled impulses) ──
+  state._dripTimer = setInterval(() => {
+    if (!state.audioCtx || state.audioCtx.state === 'closed') return;
+    const now = ctx.currentTime;
+    // Create a short impulse filtered to sound like a drop hitting water
+    const dripLen = ctx.sampleRate * 0.08;
+    const dripBuf = ctx.createBuffer(1, dripLen, ctx.sampleRate);
+    const dd = dripBuf.getChannelData(0);
+    for (let i = 0; i < dripLen; i++) {
+      dd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (dripLen * 0.12));
+    }
+    const drip = ctx.createBufferSource(); drip.buffer = dripBuf;
+    const dripBP = biquad(ctx, 'bandpass', 800 + Math.random() * 1600, 3);
+    const dripG  = ctx.createGain();
+    dripG.gain.setValueAtTime(0.04 + Math.random() * 0.06, now);
+    dripG.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    drip.connect(dripBP); dripBP.connect(dripG); dripG.connect(dest);
+    drip.start(now); drip.stop(now + 0.18);
+  }, 400 + Math.random() * 600);
+
+  // ── Layer 6: Very slow rain intensity swell ──
+  const mainLFO  = ctx.createOscillator(); mainLFO.frequency.value = 0.025;
+  const mainLFOG = ctx.createGain(); mainLFOG.gain.value = 0.08;
+  mainLFO.connect(mainLFOG); mainLFOG.connect(rainG.gain); mainLFO.start();
+  state.audioNodes.mainLFO = mainLFO;
 }
 
-function buildFire(ctx, dest) {
-  const n1  = noise(ctx);
-  const bp1 = biquad(ctx, 'bandpass', 1400, 1.5);
-  const g1  = ctx.createGain(); g1.gain.value = 0.2;
-  n1.connect(bp1); bp1.connect(g1); g1.connect(dest);
-  state.audioNodes.n1 = n1;
+/* ══════════════════════════════════════════════════════════
+   🔥 BONFIRE — Warm crackling fire (for Candle mode)
+   Layers: base roar, mid crackle, random pops/snaps,
+           low warmth drone, gentle sway
+══════════════════════════════════════════════════════════ */
+function buildBonfire(ctx, dest) {
+  const t = ctx.currentTime;
 
-  const n2  = noise(ctx);
-  const lp2 = biquad(ctx, 'lowpass', 140, 0.9);
-  const g2  = ctx.createGain(); g2.gain.value = 0.18;
-  n2.connect(lp2); lp2.connect(g2); g2.connect(dest);
-  state.audioNodes.n2 = n2;
+  // ── Layer 1: Fire base roar (brown noise → lowpass = deep warm body) ──
+  const roar   = brownNoise(ctx, 6);
+  const roarLP = biquad(ctx, 'lowpass', 280, 0.8);
+  const roarG  = ctx.createGain(); roarG.gain.value = 0.30;
+  roar.connect(roarLP); roarLP.connect(roarG); roarG.connect(dest);
+  state.audioNodes.roar = roar;
 
-  const lfo = ctx.createOscillator(); lfo.frequency.value = 0.18;
-  const lfoG = ctx.createGain(); lfoG.gain.value = 0.07;
-  lfo.connect(lfoG); lfoG.connect(g1.gain); lfo.start();
-  state.audioNodes.lfo = lfo;
+  // ── Layer 2: Mid-frequency crackle (noise → bandpass 800-2500Hz) ──
+  const crackleNoise = noise(ctx, 3);
+  const crackleBP    = biquad(ctx, 'bandpass', 1600, 1.8);
+  const crackleG     = ctx.createGain(); crackleG.gain.value = 0.18;
+  crackleNoise.connect(crackleBP); crackleBP.connect(crackleG); crackleG.connect(dest);
+  state.audioNodes.crackleNoise = crackleNoise;
+
+  // Fast jittery LFO to create crackle rhythm (irregular volume modulation)
+  const crackleLFO  = ctx.createOscillator(); crackleLFO.frequency.value = 5.5;
+  const crackleLFOG = ctx.createGain(); crackleLFOG.gain.value = 0.12;
+  crackleLFO.connect(crackleLFOG); crackleLFOG.connect(crackleG.gain); crackleLFO.start();
+  state.audioNodes.crackleLFO = crackleLFO;
+
+  // Second LFO at incommensurate frequency for natural irregularity
+  const crackleLFO2  = ctx.createOscillator(); crackleLFO2.frequency.value = 3.7;
+  const crackleLFO2G = ctx.createGain(); crackleLFO2G.gain.value = 0.08;
+  crackleLFO2.connect(crackleLFO2G); crackleLFO2G.connect(crackleG.gain); crackleLFO2.start();
+  state.audioNodes.crackleLFO2 = crackleLFO2;
+
+  // ── Layer 3: High sparkle (thin texture of fire—ember hiss) ──
+  const ember   = noise(ctx, 2);
+  const emberBP = biquad(ctx, 'bandpass', 4500, 2.5);
+  const emberG  = ctx.createGain(); emberG.gain.value = 0.04;
+  ember.connect(emberBP); emberBP.connect(emberG); emberG.connect(dest);
+  state.audioNodes.ember = ember;
+
+  // ── Layer 4: Deep warmth sub-bass drone ──
+  const warmth = ctx.createOscillator(); warmth.type = 'sine'; warmth.frequency.value = 58;
+  const warmG  = ctx.createGain(); warmG.gain.value = 0.07;
+  warmth.connect(warmG); warmG.connect(dest); warmth.start();
+  state.audioNodes.warmth = warmth;
+
+  // ── Layer 5: Random pop/snap impulses (wood cracking) ──
+  state._crackleTimer = setInterval(() => {
+    if (!state.audioCtx || state.audioCtx.state === 'closed') return;
+    const now = ctx.currentTime;
+    // Short sharp impulse = snapping wood pop
+    const popLen = ctx.sampleRate * (0.02 + Math.random() * 0.03);
+    const popBuf = ctx.createBuffer(1, popLen, ctx.sampleRate);
+    const pd = popBuf.getChannelData(0);
+    for (let i = 0; i < popLen; i++) {
+      pd[i] = (Math.random() * 2 - 1) * Math.exp(-i / (popLen * 0.08)) * 1.5;
+    }
+    const pop   = ctx.createBufferSource(); pop.buffer = popBuf;
+    const popBP = biquad(ctx, 'bandpass', 1000 + Math.random() * 3000, 2 + Math.random() * 3);
+    const popG  = ctx.createGain();
+    const vol = 0.06 + Math.random() * 0.10;
+    popG.gain.setValueAtTime(vol, now);
+    popG.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    pop.connect(popBP); popBP.connect(popG); popG.connect(dest);
+    pop.start(now); pop.stop(now + 0.12);
+  }, 200 + Math.random() * 500);
+
+  // ── Layer 6: Slow intensity sway (fire breathing) ──
+  const swayLFO  = ctx.createOscillator(); swayLFO.frequency.value = 0.065;
+  const swayLFOG = ctx.createGain(); swayLFOG.gain.value = 0.06;
+  swayLFO.connect(swayLFOG); swayLFOG.connect(roarG.gain); swayLFO.start();
+  state.audioNodes.swayLFO = swayLFO;
+
+  // Second sway on crackle layer
+  const swayLFO2  = ctx.createOscillator(); swayLFO2.frequency.value = 0.11;
+  const swayLFO2G = ctx.createGain(); swayLFO2G.gain.value = 0.04;
+  swayLFO2.connect(swayLFO2G); swayLFO2G.connect(crackleG.gain); swayLFO2.start();
+  state.audioNodes.swayLFO2 = swayLFO2;
 }
 
-function buildForest(ctx, dest) {
-  const n1  = noise(ctx);
-  const bp1 = biquad(ctx, 'bandpass', 550, 0.28);
-  const g1  = ctx.createGain(); g1.gain.value = 0.18;
-  n1.connect(bp1); bp1.connect(g1); g1.connect(dest);
-  state.audioNodes.n1 = n1;
+/* ══════════════════════════════════════════════════════════
+   🌿 FOREST BREEZE — Wind through leaves (for Tree mode)
+   Layers: base wind, high leaf rustle, low hum,
+           gentle sway, random soft chirp accents
+══════════════════════════════════════════════════════════ */
+function buildForestBreeze(ctx, dest) {
+  const t = ctx.currentTime;
 
-  [440, 528, 622].forEach((f, i) => {
-    const osc = ctx.createOscillator();
-    osc.type = 'sine'; osc.frequency.value = f;
-    const g = ctx.createGain(); g.gain.value = 0.012;
+  // ── Layer 1: Base wind body (pink noise → bandpass = smooth breeze) ──
+  const wind   = pinkNoise(ctx, 6);
+  const windBP = biquad(ctx, 'bandpass', 450, 0.3);
+  const windLP = biquad(ctx, 'lowpass', 2000, 0.5);
+  const windG  = ctx.createGain(); windG.gain.value = 0.28;
+  wind.connect(windBP); windBP.connect(windLP); windLP.connect(windG); windG.connect(dest);
+  state.audioNodes.wind = wind;
+
+  // Organic sway: very slow LFO modulates wind volume like gusts coming and going
+  const gustLFO  = ctx.createOscillator(); gustLFO.frequency.value = 0.05;
+  const gustLFOG = ctx.createGain(); gustLFOG.gain.value = 0.12;
+  gustLFO.connect(gustLFOG); gustLFOG.connect(windG.gain); gustLFO.start();
+  state.audioNodes.gustLFO = gustLFO;
+
+  // Second gust layer at different frequency for complexity
+  const gustLFO2  = ctx.createOscillator(); gustLFO2.frequency.value = 0.028;
+  const gustLFO2G = ctx.createGain(); gustLFO2G.gain.value = 0.07;
+  gustLFO2.connect(gustLFO2G); gustLFO2G.connect(windG.gain); gustLFO2.start();
+  state.audioNodes.gustLFO2 = gustLFO2;
+
+  // ── Layer 2: Leaf rustle (high-frequency noise → bandpass = dry rustling) ──
+  const rustle   = noise(ctx, 3);
+  const rustleBP = biquad(ctx, 'bandpass', 3800, 1.5);
+  const rustleG  = ctx.createGain(); rustleG.gain.value = 0.09;
+  rustle.connect(rustleBP); rustleBP.connect(rustleG); rustleG.connect(dest);
+  state.audioNodes.rustle = rustle;
+
+  // Rustle sways with the wind gusts
+  const rustleLFO  = ctx.createOscillator(); rustleLFO.frequency.value = 0.07;
+  const rustleLFOG = ctx.createGain(); rustleLFOG.gain.value = 0.06;
+  rustleLFO.connect(rustleLFOG); rustleLFOG.connect(rustleG.gain); rustleLFO.start();
+  state.audioNodes.rustleLFO = rustleLFO;
+
+  // ── Layer 3: Distant atmosphere / low forest hum ──
+  const hum   = brownNoise(ctx, 8);
+  const humLP = biquad(ctx, 'lowpass', 120, 0.4);
+  const humG  = ctx.createGain(); humG.gain.value = 0.10;
+  hum.connect(humLP); humLP.connect(humG); humG.connect(dest);
+  state.audioNodes.hum = hum;
+
+  // ── Layer 4: Gentle harmonic tones (like wind singing through branches) ──
+  // Creates an ethereal, meditative quality
+  [220, 330, 392].forEach((freq, i) => {
+    const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq;
+    const g   = ctx.createGain(); g.gain.value = 0.006;
     osc.connect(g); g.connect(dest); osc.start();
-    state.audioNodes['osc' + i] = osc;
+    state.audioNodes['tone' + i] = osc;
+    // Slow volume oscillation per tone for shimmering effect
+    const toneLFO  = ctx.createOscillator(); toneLFO.frequency.value = 0.03 + i * 0.015;
+    const toneLFOG = ctx.createGain(); toneLFOG.gain.value = 0.004;
+    toneLFO.connect(toneLFOG); toneLFOG.connect(g.gain); toneLFO.start();
+    state.audioNodes['toneLFO' + i] = toneLFO;
   });
 
-  const lfo = ctx.createOscillator(); lfo.frequency.value = 0.07;
-  const lfoG = ctx.createGain(); lfoG.gain.value = 0.09;
-  lfo.connect(lfoG); lfoG.connect(g1.gain); lfo.start();
-  state.audioNodes.lfo = lfo;
+  // ── Layer 5: Random soft bird chirp accents ──
+  // Very subtle, 1-2 note chirps every 4-8 seconds. Adds life without distraction.
+  state._chirpTimer = setInterval(() => {
+    if (!state.audioCtx || state.audioCtx.state === 'closed') return;
+    // Only chirp sometimes (50% chance each cycle)
+    if (Math.random() > 0.5) return;
+    const now = ctx.currentTime;
+    // Short sine sweep = chirp
+    const chirp = ctx.createOscillator(); chirp.type = 'sine';
+    const baseFreq = 2800 + Math.random() * 1800;
+    chirp.frequency.setValueAtTime(baseFreq, now);
+    chirp.frequency.exponentialRampToValueAtTime(baseFreq * (1.15 + Math.random() * 0.3), now + 0.06);
+    chirp.frequency.exponentialRampToValueAtTime(baseFreq * 0.9, now + 0.12);
+    const chirpG = ctx.createGain();
+    chirpG.gain.setValueAtTime(0, now);
+    chirpG.gain.linearRampToValueAtTime(0.012 + Math.random() * 0.008, now + 0.02);
+    chirpG.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    chirp.connect(chirpG); chirpG.connect(dest);
+    chirp.start(now); chirp.stop(now + 0.18);
+
+    // Optionally a second note (2-note phrase)
+    if (Math.random() > 0.4) {
+      const chirp2 = ctx.createOscillator(); chirp2.type = 'sine';
+      const f2 = baseFreq * (0.8 + Math.random() * 0.5);
+      chirp2.frequency.setValueAtTime(f2, now + 0.18);
+      chirp2.frequency.exponentialRampToValueAtTime(f2 * 1.1, now + 0.24);
+      const chirp2G = ctx.createGain();
+      chirp2G.gain.setValueAtTime(0, now + 0.16);
+      chirp2G.gain.linearRampToValueAtTime(0.008 + Math.random() * 0.006, now + 0.20);
+      chirp2G.gain.exponentialRampToValueAtTime(0.001, now + 0.30);
+      chirp2.connect(chirp2G); chirp2G.connect(dest);
+      chirp2.start(now + 0.16); chirp2.stop(now + 0.35);
+    }
+  }, 4000 + Math.random() * 4000);
 }
 
 btnSound.addEventListener('click', () => {
