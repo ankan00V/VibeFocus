@@ -1114,7 +1114,7 @@ body {
 
 /* ── Completion Page Follow CTA ── */
 .complete-follow {
-  margin-top: 2rem;
+  margin-top: 1rem;
   display: flex;
   flex-direction: column;
   align-items: center;
