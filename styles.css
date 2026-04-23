@@ -1158,7 +1158,7 @@ body:has(#screen-vibe.active) #spline-bg {
   justify-content: space-between;
   align-items: center;
   text-align: center;
-  padding: 2rem 2rem 2.5rem;
+  padding: 2rem 2rem 5.5rem;
   /* Pushed title higher */
 }
 
