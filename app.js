@@ -114,6 +114,10 @@ document.querySelectorAll('.vibe-card').forEach(card => {
     document.querySelectorAll('.dur-pill').forEach(p => p.classList.remove('selected'));
     state.minutes = null;
     btnStart.disabled = true;
+    // GA4: track vibe selection
+    if (typeof gtag === 'function') {
+      gtag('event', 'vibe_selected', { vibe: state.vibe });
+    }
     goTo('duration', true); // zoom exit
   });
 });
@@ -155,6 +159,10 @@ btnStart.addEventListener('click', () => {
   if (!state.minutes) return;
   state.totalSeconds = state.minutes * 60;
   state.startTime    = null;
+  // GA4: track session start
+  if (typeof gtag === 'function') {
+    gtag('event', 'session_started', { vibe: state.vibe, duration_minutes: state.minutes });
+  }
   launchFocus();
 });
 
@@ -214,6 +222,11 @@ function onSessionComplete() {
   state.rafId = null;
   stopAllSound();
   exitFullscreen();
+
+  // GA4: track session completion
+  if (typeof gtag === 'function') {
+    gtag('event', 'session_completed', { vibe: state.vibe, duration_minutes: state.minutes });
+  }
 
   completeStat.textContent = state.minutes + (state.minutes === 1 ? ' minute' : ' minutes');
   goTo('complete').then(() => {
