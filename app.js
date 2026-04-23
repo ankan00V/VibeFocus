@@ -1582,8 +1582,8 @@ function startAmbient(vibe) {
   const ctx  = state.audioCtx;
   const master = ctx.createGain();
   master.gain.setValueAtTime(0, ctx.currentTime);
-  // Premium slow fade-in (3.5 seconds)
-  master.gain.linearRampToValueAtTime(0.45, ctx.currentTime + 3.5);
+  // Premium slow fade-in (3s)
+  master.gain.linearRampToValueAtTime(0.8, ctx.currentTime + 3.0);
   master.connect(ctx.destination);
   state.audioNodes.master = master;
 
@@ -1611,9 +1611,13 @@ function brownNoise(ctx, seconds = 4) {
   let last = 0;
   for (let i = 0; i < len; i++) {
     const white = Math.random() * 2 - 1;
-    last = (last + (0.02 * white)) / 1.02;
-    d[i] = last * 3.5; // normalize
+    last = (last + (0.2 * white)) / 1.02;
+    d[i] = last * 0.8; // normalize to ±0.8 range
   }
+  // Normalize to fill dynamic range
+  let peak = 0;
+  for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(d[i]));
+  if (peak > 0) for (let i = 0; i < len; i++) d[i] = (d[i] / peak) * 0.9;
   const src = ctx.createBufferSource();
   src.buffer = buf; src.loop = true; src.start();
   return src;
@@ -1659,14 +1663,14 @@ function buildRain(ctx, dest) {
   const rainBed = brownNoise(ctx, 6);
   const rainBP  = biquad(ctx, 'bandpass', 2200, 0.5);
   const rainLP  = biquad(ctx, 'lowpass', 6000, 0.7);
-  const rainG   = ctx.createGain(); rainG.gain.value = 0.38;
+  const rainG   = ctx.createGain(); rainG.gain.value = 0.55;
   rainBed.connect(rainBP); rainBP.connect(rainLP); rainLP.connect(rainG); rainG.connect(dest);
   state.audioNodes.rainBed = rainBed;
 
   // ── Layer 2: High-frequency rain sparkle (light drops on surface) ──
   const sparkle   = noise(ctx, 3);
   const sparkBP   = biquad(ctx, 'bandpass', 5500, 1.2);
-  const sparkG    = ctx.createGain(); sparkG.gain.value = 0.08;
+  const sparkG    = ctx.createGain(); sparkG.gain.value = 0.15;
   sparkle.connect(sparkBP); sparkBP.connect(sparkG); sparkG.connect(dest);
   state.audioNodes.sparkle = sparkle;
 
@@ -1679,7 +1683,7 @@ function buildRain(ctx, dest) {
   // ── Layer 3: Low distant rumble (like rain on a roof, barely there) ──
   const rumble   = brownNoise(ctx, 8);
   const rumbleLP = biquad(ctx, 'lowpass', 180, 0.6);
-  const rumbleG  = ctx.createGain(); rumbleG.gain.value = 0.14;
+  const rumbleG  = ctx.createGain(); rumbleG.gain.value = 0.22;
   rumble.connect(rumbleLP); rumbleLP.connect(rumbleG); rumbleG.connect(dest);
   state.audioNodes.rumble = rumble;
 
@@ -1691,7 +1695,7 @@ function buildRain(ctx, dest) {
 
   // ── Layer 4: Sub-bass presence (warmth, like indoor rain feeling) ──
   const sub = ctx.createOscillator(); sub.type = 'sine'; sub.frequency.value = 42;
-  const subG = ctx.createGain(); subG.gain.value = 0.06;
+  const subG = ctx.createGain(); subG.gain.value = 0.10;
   sub.connect(subG); subG.connect(dest); sub.start();
   state.audioNodes.sub = sub;
 
@@ -1733,14 +1737,14 @@ function buildBonfire(ctx, dest) {
   // ── Layer 1: Fire base roar (brown noise → lowpass = deep warm body) ──
   const roar   = brownNoise(ctx, 6);
   const roarLP = biquad(ctx, 'lowpass', 280, 0.8);
-  const roarG  = ctx.createGain(); roarG.gain.value = 0.30;
+  const roarG  = ctx.createGain(); roarG.gain.value = 0.45;
   roar.connect(roarLP); roarLP.connect(roarG); roarG.connect(dest);
   state.audioNodes.roar = roar;
 
   // ── Layer 2: Mid-frequency crackle (noise → bandpass 800-2500Hz) ──
   const crackleNoise = noise(ctx, 3);
   const crackleBP    = biquad(ctx, 'bandpass', 1600, 1.8);
-  const crackleG     = ctx.createGain(); crackleG.gain.value = 0.18;
+  const crackleG     = ctx.createGain(); crackleG.gain.value = 0.28;
   crackleNoise.connect(crackleBP); crackleBP.connect(crackleG); crackleG.connect(dest);
   state.audioNodes.crackleNoise = crackleNoise;
 
@@ -1759,13 +1763,13 @@ function buildBonfire(ctx, dest) {
   // ── Layer 3: High sparkle (thin texture of fire—ember hiss) ──
   const ember   = noise(ctx, 2);
   const emberBP = biquad(ctx, 'bandpass', 4500, 2.5);
-  const emberG  = ctx.createGain(); emberG.gain.value = 0.04;
+  const emberG  = ctx.createGain(); emberG.gain.value = 0.08;
   ember.connect(emberBP); emberBP.connect(emberG); emberG.connect(dest);
   state.audioNodes.ember = ember;
 
   // ── Layer 4: Deep warmth sub-bass drone ──
   const warmth = ctx.createOscillator(); warmth.type = 'sine'; warmth.frequency.value = 58;
-  const warmG  = ctx.createGain(); warmG.gain.value = 0.07;
+  const warmG  = ctx.createGain(); warmG.gain.value = 0.12;
   warmth.connect(warmG); warmG.connect(dest); warmth.start();
   state.audioNodes.warmth = warmth;
 
@@ -1815,7 +1819,7 @@ function buildForestBreeze(ctx, dest) {
   const wind   = pinkNoise(ctx, 6);
   const windBP = biquad(ctx, 'bandpass', 450, 0.3);
   const windLP = biquad(ctx, 'lowpass', 2000, 0.5);
-  const windG  = ctx.createGain(); windG.gain.value = 0.28;
+  const windG  = ctx.createGain(); windG.gain.value = 0.45;
   wind.connect(windBP); windBP.connect(windLP); windLP.connect(windG); windG.connect(dest);
   state.audioNodes.wind = wind;
 
@@ -1834,7 +1838,7 @@ function buildForestBreeze(ctx, dest) {
   // ── Layer 2: Leaf rustle (high-frequency noise → bandpass = dry rustling) ──
   const rustle   = noise(ctx, 3);
   const rustleBP = biquad(ctx, 'bandpass', 3800, 1.5);
-  const rustleG  = ctx.createGain(); rustleG.gain.value = 0.09;
+  const rustleG  = ctx.createGain(); rustleG.gain.value = 0.15;
   rustle.connect(rustleBP); rustleBP.connect(rustleG); rustleG.connect(dest);
   state.audioNodes.rustle = rustle;
 
@@ -1847,7 +1851,7 @@ function buildForestBreeze(ctx, dest) {
   // ── Layer 3: Distant atmosphere / low forest hum ──
   const hum   = brownNoise(ctx, 8);
   const humLP = biquad(ctx, 'lowpass', 120, 0.4);
-  const humG  = ctx.createGain(); humG.gain.value = 0.10;
+  const humG  = ctx.createGain(); humG.gain.value = 0.18;
   hum.connect(humLP); humLP.connect(humG); humG.connect(dest);
   state.audioNodes.hum = hum;
 
@@ -1855,7 +1859,7 @@ function buildForestBreeze(ctx, dest) {
   // Creates an ethereal, meditative quality
   [220, 330, 392].forEach((freq, i) => {
     const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = freq;
-    const g   = ctx.createGain(); g.gain.value = 0.006;
+    const g   = ctx.createGain(); g.gain.value = 0.012;
     osc.connect(g); g.connect(dest); osc.start();
     state.audioNodes['tone' + i] = osc;
     // Slow volume oscillation per tone for shimmering effect
