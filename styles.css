@@ -1237,7 +1237,7 @@ body:has(#screen-vibe.active) #spline-bg {
   margin-top: auto;
   z-index: 20;
   padding: 0.5rem 1.5rem;
-  margin-bottom: 1.25rem;
+  margin-bottom: 2.5rem;
 }
 
 /* ── Premium Vibe Card — hero-level selectors with accent glow ── */
