@@ -155,7 +155,11 @@ const customInput = document.getElementById('custom-minutes');
 if (customInput) {
   customInput.addEventListener('input', () => {
     let val = parseInt(customInput.value, 10);
-    if(val > 100) { val = 100; customInput.value = 100; }
+    if(val > 120) { 
+      val = 120; 
+      customInput.value = 120; 
+      showToast("Relax for 10 mins and then focus again.");
+    }
     if(val < 1) { val = 1; customInput.value = 1; }
     if(document.getElementById('dur-custom').classList.contains('selected')) {
       state.minutes = val;
@@ -169,6 +173,10 @@ btnStart.addEventListener('click', () => {
   if (!state.minutes) return;
   state.totalSeconds = state.minutes * 60;
   state.startTime    = null;
+  
+  // Important for iOS/Safari: init/resume AudioContext directly in click handler
+  initAudioCtx();
+
   // GA4: track session start
   if (typeof gtag === 'function') {
     gtag('event', 'session_started', { vibe: state.vibe, duration_minutes: state.minutes });
@@ -1555,6 +1563,8 @@ function tickConfetti() {
      Fire (Candle)     -> sounds/fire.wav
      Wind (Tree)       -> sounds/wind.wav
 ============================================================== */
+const audioBuffers = {};
+
 function initAudioCtx() {
   if (!state.audioCtx) {
     state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1563,7 +1573,8 @@ function initAudioCtx() {
 }
 
 function stopAllSound() {
-  // Stop HTML Audio element
+  state._loadingSrc = null;
+  // Stop HTML Audio element (legacy fallback if any)
   if (state._ambientAudio) {
     state._ambientAudio.pause();
     state._ambientAudio.src = '';
@@ -1572,8 +1583,10 @@ function stopAllSound() {
   if (state._fadeTimer) { clearInterval(state._fadeTimer); state._fadeTimer = null; }
 
   // Stop any remaining Web Audio nodes
+  if (state.audioNodes['ambientSource']) {
+    try { state.audioNodes['ambientSource'].stop(); } catch(e) {}
+  }
   Object.values(state.audioNodes).forEach(n => {
-    try { n.stop && n.stop(); }   catch(e) {}
     try { n.disconnect && n.disconnect(); } catch(e) {}
   });
   state.audioNodes = {};
@@ -1583,51 +1596,67 @@ function startAmbient(vibe) {
   initAudioCtx();
   stopAllSound();
 
-  if (vibe === 'ice')    playAmbientFile('sounds/rain.wav');
-  if (vibe === 'candle') playAmbientFile('sounds/fire.wav');
-  if (vibe === 'tree')   playAmbientFile('sounds/wind.wav');
+  let src = '';
+  if (vibe === 'ice')    src = 'sounds/rain.wav';
+  if (vibe === 'candle') src = 'sounds/fire.wav';
+  if (vibe === 'tree')   src = 'sounds/wind.wav';
+  
+  if (src) {
+    state._loadingSrc = src;
+    playAmbientFile(src);
+  }
 }
 
-function playAmbientFile(src) {
-  const audio = new Audio(src);
-  audio.loop = true;
-  audio.volume = 0;
-  audio.preload = 'auto';
-  state._ambientAudio = audio;
-
-  const fadeIn = () => {
-    const targetVol = 0.85;
-    const step = targetVol / (3000 / 50);
-    state._fadeTimer = setInterval(() => {
-      if (audio.volume + step >= targetVol) {
-        audio.volume = targetVol;
-        clearInterval(state._fadeTimer);
-        state._fadeTimer = null;
-      } else {
-        audio.volume = Math.min(audio.volume + step, targetVol);
-      }
-    }, 50);
-  };
-
-  audio.addEventListener('canplaythrough', () => {
-    audio.play().then(fadeIn).catch(e => console.warn('Audio play blocked:', e));
-  }, { once: true });
-
-  setTimeout(() => {
-    if (audio.paused && state._ambientAudio === audio) {
-      audio.play().then(fadeIn).catch(() => {});
+async function playAmbientFile(src) {
+  initAudioCtx();
+  const ctx = state.audioCtx;
+  
+  let buffer = audioBuffers[src];
+  if (!buffer) {
+    try {
+      const response = await fetch(src);
+      const arrayBuffer = await response.arrayBuffer();
+      buffer = await ctx.decodeAudioData(arrayBuffer);
+      audioBuffers[src] = buffer;
+    } catch (e) {
+      console.error('Failed to load audio:', src, e);
+      return;
     }
-  }, 500);
-}
+  }
+  
+  // If sound was turned off while loading, or if another sound was started
+  if (!state.soundOn || state._loadingSrc !== src) {
+     return;
+  }
 
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+
+  const gainNode = ctx.createGain();
+  gainNode.gain.value = 0;
+  
+  source.connect(gainNode);
+  gainNode.connect(ctx.destination);
+  
+  source.start(0);
+  
+  state.audioNodes['ambientSource'] = source;
+  state.audioNodes['ambientGain'] = gainNode;
+  
+  // Fade in smoothly
+  gainNode.gain.setValueAtTime(0, ctx.currentTime);
+  gainNode.gain.linearRampToValueAtTime(0.85, ctx.currentTime + 3);
+}
 
 btnSound.addEventListener('click', () => {
+  initAudioCtx();
   if (state.soundOn) {
     stopAllSound();
     state.soundOn = false;
   } else {
-    startAmbient(state.vibe);
     state.soundOn = true;
+    startAmbient(state.vibe);
   }
   syncSoundIcon();
 });
@@ -1664,3 +1693,35 @@ function fmt(s) {
 
 /* ── Init sound icon state ── */
 syncSoundIcon();
+
+/* ── UI Helpers ── */
+function showToast(msg) {
+  let toast = document.getElementById('vibe-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'vibe-toast';
+    toast.style.position = 'fixed';
+    toast.style.bottom = '30px';
+    toast.style.left = '50%';
+    toast.style.transform = 'translateX(-50%)';
+    toast.style.background = 'rgba(20, 20, 25, 0.9)';
+    toast.style.border = '1px solid rgba(255, 255, 255, 0.1)';
+    toast.style.backdropFilter = 'blur(10px)';
+    toast.style.color = '#fff';
+    toast.style.padding = '12px 24px';
+    toast.style.borderRadius = '12px';
+    toast.style.zIndex = '9999';
+    toast.style.fontFamily = 'Inter, sans-serif';
+    toast.style.fontSize = '14px';
+    toast.style.boxShadow = '0 8px 24px rgba(0,0,0,0.4)';
+    toast.style.transition = 'opacity 0.4s ease';
+    toast.style.pointerEvents = 'none';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.opacity = '1';
+  clearTimeout(toast.hideTimeout);
+  toast.hideTimeout = setTimeout(() => {
+    toast.style.opacity = '0';
+  }, 3500);
+}
