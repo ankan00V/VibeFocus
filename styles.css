@@ -1211,79 +1211,149 @@ body:has(#screen-vibe.active) #spline-bg {
   justify-content: space-between;
   align-items: center;
   text-align: center;
-  padding: 2rem 2rem 5.5rem;
-  /* Pushed title higher */
+  padding: 2rem 2rem 3rem;
 }
 
 #screen-vibe .vibe-header {
   text-align: center;
   align-items: center;
   margin-bottom: 0;
+  z-index: 20;
 }
 
 #screen-vibe .app-eyebrow {
   margin-bottom: 1rem;
 }
 
+/* ── Card Tray: elegant horizontal strip at the bottom ── */
 #screen-vibe .vibe-grid {
   display: flex;
   flex-direction: row;
   justify-content: center;
   flex-wrap: nowrap;
-  gap: 1.5rem;
+  gap: 1.25rem;
   width: 100%;
-  max-width: 1100px;
+  max-width: 1000px;
   margin-top: auto;
   z-index: 20;
+  padding: 0.75rem 1rem;
 }
 
-/* Style cards for horizontal bottom placement — PREMIUM ENLARGED */
+/* ── Premium Vibe Card — compact horizontal pill with accent glow ── */
 #screen-vibe .vibe-card {
-  flex: 0 1 400px;
+  flex: 0 1 320px;
   min-width: 0;
-  max-width: 440px;
-  padding: 1.75rem 2rem;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  max-width: 340px;
+  padding: 1rem 1.25rem;
+  background: rgba(8, 8, 16, 0.55);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-lg);
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 1.75rem;
+  gap: 1rem;
+  transition:
+    border-color 0.35s var(--ease),
+    box-shadow 0.35s var(--ease),
+    background 0.35s var(--ease),
+    transform 0.35s var(--ease);
 }
 
+#screen-vibe .vibe-card:hover,
+#screen-vibe .vibe-card:focus-visible {
+  transform: translateY(-4px);
+  background: rgba(12, 12, 24, 0.7);
+}
+
+/* Vibe-specific accent borders & glow on hover */
+#screen-vibe #vibe-ice:hover,
+#screen-vibe #vibe-ice:focus-visible {
+  border-color: rgba(125, 211, 245, 0.4);
+  box-shadow:
+    0 0 20px -4px rgba(125, 211, 245, 0.2),
+    0 8px 32px -8px rgba(125, 211, 245, 0.1),
+    inset 0 1px 0 rgba(125, 211, 245, 0.15);
+}
+
+#screen-vibe #vibe-candle:hover,
+#screen-vibe #vibe-candle:focus-visible {
+  border-color: rgba(245, 158, 66, 0.4);
+  box-shadow:
+    0 0 20px -4px rgba(245, 158, 66, 0.2),
+    0 8px 32px -8px rgba(245, 158, 66, 0.1),
+    inset 0 1px 0 rgba(245, 158, 66, 0.15);
+}
+
+#screen-vibe #vibe-tree:hover,
+#screen-vibe #vibe-tree:focus-visible {
+  border-color: rgba(110, 231, 183, 0.4);
+  box-shadow:
+    0 0 20px -4px rgba(110, 231, 183, 0.2),
+    0 8px 32px -8px rgba(110, 231, 183, 0.1),
+    inset 0 1px 0 rgba(110, 231, 183, 0.15);
+}
+
+/* Accent underline bar — always visible, vibe-colored */
+#screen-vibe .vibe-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  border-radius: 2px;
+  opacity: 0.4;
+  transition: opacity 0.35s var(--ease), left 0.35s var(--ease), right 0.35s var(--ease);
+}
+#screen-vibe .vibe-card:hover::after {
+  opacity: 0.9;
+  left: 10%;
+  right: 10%;
+}
+#screen-vibe #vibe-ice::after { background: var(--ice); }
+#screen-vibe #vibe-candle::after { background: var(--candle); }
+#screen-vibe #vibe-tree::after { background: var(--tree); }
+
+/* Canvas preview — compact rounded thumbnail */
 #screen-vibe .vibe-canvas-wrap {
-  width: 140px;
-  height: 150px;
+  width: 72px;
+  height: 72px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 16px;
   overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 #screen-vibe .vibe-preview {
   width: 100%;
   height: 100%;
+  object-fit: cover;
 }
 
 #screen-vibe .vibe-label-wrap {
   text-align: left;
   align-items: flex-start;
-  gap: 0.2rem;
+  gap: 0.15rem;
 }
 
 #screen-vibe .vibe-name {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
 #screen-vibe .vibe-sub {
-  font-size: 0.72rem;
-  opacity: 0.6;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  font-weight: 400;
+  line-height: 1.4;
 }
 
 /* ── Custom Timer Input ── */
@@ -1345,9 +1415,11 @@ body:has(#screen-vibe.active) #spline-bg {
   #screen-vibe .vibe-grid {
     flex-wrap: wrap;
     justify-content: center;
+    gap: 1rem;
   }
   #screen-vibe .vibe-card {
-    flex: 1 1 300px;
+    flex: 1 1 260px;
+    max-width: 300px;
   }
 }
 
@@ -1366,40 +1438,41 @@ body:has(#screen-vibe.active) #spline-bg {
   #screen-vibe .vibe-grid {
     flex-direction: column !important;
     align-items: center;
-    gap: 1.75rem;
+    gap: 1rem;
     padding: 0 1rem;
     width: 100%;
-    margin-bottom: 3rem;
+    margin-bottom: 2rem;
     overflow-y: visible;
     margin-top: 1rem !important;
   }
 
   #screen-vibe .vibe-card {
     width: 100%;
-    max-width: 320px;
-    padding: 2.2rem 1.5rem;
-    flex-direction: column !important; /* Premium tall card for mobile */
-    gap: 1.4rem;
-    border-radius: var(--r-xl);
+    max-width: 340px;
+    padding: 1rem 1.25rem;
+    flex-direction: row !important;
+    gap: 1rem;
+    border-radius: var(--r-lg);
   }
 
   #screen-vibe .vibe-canvas-wrap {
-    width: 140px !important;
-    height: 160px !important;
+    width: 64px !important;
+    height: 64px !important;
+    border-radius: 14px;
   }
 
   #screen-vibe .vibe-label-wrap {
-    gap: 0.4rem;
-    align-items: center;
-    text-align: center;
+    gap: 0.15rem;
+    align-items: flex-start;
+    text-align: left;
   }
 
   #screen-vibe .vibe-name {
-    font-size: 1.25rem;
+    font-size: 0.95rem;
   }
 
   #screen-vibe .vibe-sub {
-    font-size: 0.8rem;
+    font-size: 0.72rem;
   }
 
   /* Fix Footer overlapping on scroll */
