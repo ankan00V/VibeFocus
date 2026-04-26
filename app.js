@@ -1564,13 +1564,40 @@ function tickConfetti() {
      Wind (Tree)       -> sounds/wind.wav
 ============================================================== */
 const audioBuffers = {};
+let audioCtxUnlocked = false;
 
 function initAudioCtx() {
   if (!state.audioCtx) {
     state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   }
-  if (state.audioCtx.state === 'suspended') state.audioCtx.resume();
+  if (state.audioCtx.state === 'suspended') {
+    state.audioCtx.resume();
+  }
 }
+
+// iOS/Mobile Safari strict audio policy requires playing a silent buffer on first interaction
+function unlockAudioCtx() {
+  if (audioCtxUnlocked) return;
+  initAudioCtx();
+  const ctx = state.audioCtx;
+  
+  const buffer = ctx.createBuffer(1, 1, 22050);
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(ctx.destination);
+  source.start(0);
+  
+  if (ctx.state === 'suspended') {
+    ctx.resume().then(() => { audioCtxUnlocked = true; }).catch(e => console.warn(e));
+  } else {
+    audioCtxUnlocked = true;
+  }
+}
+
+// Bind unlock to the first user interaction anywhere on the document
+['touchstart', 'click'].forEach(event => {
+  document.body.addEventListener(event, unlockAudioCtx, { once: true, capture: true });
+});
 
 function stopAllSound() {
   state._loadingSrc = null;
