@@ -158,7 +158,7 @@ if (customInput) {
     if(val > 120) { 
       val = 120; 
       customInput.value = 120; 
-      showToast("Relax for 10 mins and then focus again.");
+      showToast("Even the deepest focus needs rest. 120 minutes is the limit. Breathe, reset, and return when ready.");
     }
     if(val < 1) { val = 1; customInput.value = 1; }
     if(document.getElementById('dur-custom').classList.contains('selected')) {
