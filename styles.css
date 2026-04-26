@@ -1468,37 +1468,3 @@ body:has(#screen-vibe.active) #spline-bg {
     padding: 1.1rem 2rem;
   }
 }
-
-/* ══════════════════════════════════════════════════════════
-   MOBILE PERFORMANCE CRITICAL FIXES
-   Restored aesthetics for modern mobiles. Only disabling
-   heavy spline 3D and overlapping animations that cause lag.
-══════════════════════════════════════════════════════════ */
-@media (max-width: 768px) and (pointer: coarse) {
-  /* Retain backdrop-filter for premium glassmorphism, just reduce blur radius slightly */
-  .vibe-card,
-  #screen-vibe .vibe-card,
-  .dur-pill,
-  .btn-hud,
-  .complete-stat-card {
-    backdrop-filter: blur(12px) saturate(140%) !important;
-    -webkit-backdrop-filter: blur(12px) saturate(140%) !important;
-  }
-
-  /* ── Stop heavy orb CSS animations ── */
-  #gradient-bg::after,
-  .bg-orb-2,
-  .bg-orb-3 {
-    animation: none !important;
-  }
-
-  /* ── Simplify trophy animaton ── */
-  .trophy-emoji {
-    animation: trophy-float 5s ease-in-out infinite;
-  }
-  .trophy-aura {
-    animation: none;
-    opacity: 0.6;
-    transform: scale(1);
-  }
-}
