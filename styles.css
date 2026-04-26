@@ -1183,7 +1183,7 @@ body {
   pointer-events: none;
   opacity: 0;
   transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1);
-  transform: translate(0, 0vh) scale(1.15); /* Shifted down slightly to center between header and cards */
+  transform: translate(0, -8vh) scale(1.15); /* Nudged up to sit between header and cards */
 }
 
 /* Hide the Spline watermark logo from the Shadow DOM */
@@ -1211,7 +1211,7 @@ body:has(#screen-vibe.active) #spline-bg {
   justify-content: space-between;
   align-items: center;
   text-align: center;
-  padding: 2rem 2rem 3rem;
+  padding: 2rem 2rem 1.5rem;
 }
 
 #screen-vibe .vibe-header {
@@ -1237,6 +1237,7 @@ body:has(#screen-vibe.active) #spline-bg {
   margin-top: auto;
   z-index: 20;
   padding: 0.5rem 1.5rem;
+  margin-bottom: 1.25rem;
 }
 
 /* ── Premium Vibe Card — hero-level selectors with accent glow ── */
