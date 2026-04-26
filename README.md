@@ -4,7 +4,7 @@
 
 VibeFocus is a premium, immersive focus timer designed for minimalist work states. Unlike traditional productivity trackers, VibeFocus replaces rigid countdowns with organic, physics-based visualizers that allow time to fade away into the background.
 
-![VibeFocus Preview](vibe-focus-three.vercel.app)
+vibe-focus-three.vercel.app
 
 ## ✨ Features
 
