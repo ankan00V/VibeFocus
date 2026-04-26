@@ -1183,7 +1183,12 @@ body {
   pointer-events: none;
   opacity: 0;
   transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1);
-  transform: translate(0, -15vh) scale(1.15); /* Shifted up to prevent overlapping the cards */
+  transform: translate(0, 0vh) scale(1.15); /* Shifted down slightly to center between header and cards */
+}
+
+/* Hide the Spline watermark logo from the Shadow DOM */
+#spline-bg::part(logo) {
+  display: none !important;
 }
 
 body:has(#screen-vibe.active) #spline-bg {
@@ -1460,7 +1465,7 @@ body:has(#screen-vibe.active) #spline-bg {
   }
 
   #spline-bg {
-    transform: translate(0, -10vh) scale(1.2); /* Shifted up for portrait */
+    transform: translate(0, -5vh) scale(1.2); /* Shifted down slightly */
   }
   
   .btn-start {
