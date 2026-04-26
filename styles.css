@@ -1349,34 +1349,61 @@ body:has(#screen-vibe.active) #spline-bg {
 @media (max-width: 768px) {
   .screen {
     padding: 1.5rem 1rem;
+    justify-content: flex-start;
   }
 
   /* Landing Page Vertical Stack */
+  #screen-vibe.active {
+    justify-content: flex-start;
+    padding-bottom: 2.5rem;
+  }
+
   #screen-vibe .vibe-grid {
     flex-direction: column !important;
     align-items: center;
-    gap: 1.2rem;
+    gap: 1.75rem;
     padding: 0 1rem;
     width: 100%;
-    margin-bottom: 2rem;
+    margin-bottom: 3rem;
     overflow-y: visible;
     margin-top: 1rem !important;
   }
 
   #screen-vibe .vibe-card {
     width: 100%;
-    max-width: 400px;
-    padding: 1.15rem 1.25rem;
-    flex-direction: row !important; /* Keep horizontal thumb layout on mobile stack */
+    max-width: 320px;
+    padding: 2.2rem 1.5rem;
+    flex-direction: column !important; /* Premium tall card for mobile */
+    gap: 1.4rem;
+    border-radius: var(--r-xl);
   }
 
   #screen-vibe .vibe-canvas-wrap {
-    width: 80px !important;
-    height: 90px !important;
+    width: 140px !important;
+    height: 160px !important;
   }
 
   #screen-vibe .vibe-label-wrap {
-    gap: 0.1rem;
+    gap: 0.4rem;
+    align-items: center;
+    text-align: center;
+  }
+
+  #screen-vibe .vibe-name {
+    font-size: 1.25rem;
+  }
+
+  #screen-vibe .vibe-sub {
+    font-size: 0.8rem;
+  }
+
+  /* Fix Footer overlapping on scroll */
+  .landing-footer {
+    position: relative;
+    bottom: auto;
+    margin-top: auto;
+    padding: 2rem 0 1rem;
+    background: transparent;
   }
 
   /* Duration Pills */
@@ -1444,103 +1471,28 @@ body:has(#screen-vibe.active) #spline-bg {
 
 /* ══════════════════════════════════════════════════════════
    MOBILE PERFORMANCE CRITICAL FIXES
-   Disable backdrop-filter, heavy animations, complex gradients on touch devices
+   Restored aesthetics for modern mobiles. Only disabling
+   heavy spline 3D and overlapping animations that cause lag.
 ══════════════════════════════════════════════════════════ */
 @media (max-width: 768px) and (pointer: coarse) {
-  /* ── Kill backdrop-filter: the #1 GPU killer on mobile ── */
+  /* Retain backdrop-filter for premium glassmorphism, just reduce blur radius slightly */
   .vibe-card,
   #screen-vibe .vibe-card,
   .dur-pill,
-  .btn-back,
   .btn-hud,
-  .btn-restart,
-  .complete-stat-card,
-  .app-tagline {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-  }
-
-  /* Replace blurred glass with solid semi-transparent backgrounds */
-  .vibe-card,
-  #screen-vibe .vibe-card {
-    background: rgba(15, 15, 22, 0.88) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-  }
-
-  .dur-pill {
-    background: rgba(15, 15, 22, 0.85) !important;
-  }
-
-  .btn-back {
-    background: rgba(15, 15, 22, 0.8) !important;
-  }
-
-  .btn-hud {
-    background: rgba(10, 10, 16, 0.75) !important;
-  }
-
   .complete-stat-card {
-    background: rgba(15, 15, 22, 0.9) !important;
+    backdrop-filter: blur(12px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(12px) saturate(140%) !important;
   }
 
-  .app-tagline {
-    background: rgba(10, 10, 18, 0.85) !important;
-  }
-
-  .btn-restart {
-    background: rgba(30, 30, 45, 0.88) !important;
-  }
-
-  /* ── Stop orb CSS animations — running 3 animations simultaneously is costly ── */
-  #gradient-bg::after {
-    animation: none !important;
-  }
+  /* ── Stop heavy orb CSS animations ── */
+  #gradient-bg::after,
   .bg-orb-2,
   .bg-orb-3 {
     animation: none !important;
   }
 
-  /* ── Stop card float animation — running per card (3x) ── */
-  .vibe-card {
-    animation: none !important;
-  }
-
-  /* ── Simplify breathe animation on start button ── */
-  .btn-start:not(:disabled) {
-    animation: none !important;
-    box-shadow:
-      0 0 0 1px rgba(124, 58, 237, 0.3),
-      0 0 24px rgba(124, 58, 237, 0.35),
-      0 4px 16px rgba(0, 0, 0, 0.4);
-  }
-  .btn-start-pulse {
-    animation: none !important;
-    display: none;
-  }
-
-  /* ── Remove will-change from elements not actively animating ── */
-  .bg-orb,
-  .screen {
-    will-change: auto;
-  }
-
-  /* ── Simplify card glow ring shadows ── */
-  #vibe-ice .card-glow-ring,
-  #vibe-candle .card-glow-ring,
-  #vibe-tree .card-glow-ring {
-    box-shadow: 0 0 20px 4px rgba(255,255,255,0.08) !important;
-  }
-
-  /* ── Disable screen transition transform — opacity only is cheaper ── */
-  .screen {
-    transform: none;
-    transition: opacity 0.45s ease;
-  }
-  .screen.active {
-    transform: none;
-  }
-
-  /* ── Simpler trophy animaton ── */
+  /* ── Simplify trophy animaton ── */
   .trophy-emoji {
     animation: trophy-float 5s ease-in-out infinite;
   }
@@ -1548,10 +1500,5 @@ body:has(#screen-vibe.active) #spline-bg {
     animation: none;
     opacity: 0.6;
     transform: scale(1);
-  }
-
-  /* ── Simplify progress bar glow ── */
-  .hud-progress-fill {
-    box-shadow: none;
   }
 }
