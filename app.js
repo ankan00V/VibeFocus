@@ -5,6 +5,29 @@
 
 'use strict';
 
+/* ── Hide Spline "Built with Spline" watermark ──────── */
+(function hideSplineLogo() {
+  function removeLogo() {
+    const viewer = document.getElementById('spline-bg');
+    if (!viewer || !viewer.shadowRoot) return false;
+    const logo = viewer.shadowRoot.querySelector('#logo');
+    const logoEl = logo || viewer.shadowRoot.querySelector('a[href*="spline"]');
+    if (logoEl) {
+      logoEl.style.display = 'none';
+      return true;
+    }
+    return false;
+  }
+
+  // Try immediately, then poll for up to 10 seconds (Spline loads async)
+  if (!removeLogo()) {
+    let attempts = 0;
+    const interval = setInterval(() => {
+      if (removeLogo() || ++attempts > 40) clearInterval(interval);
+    }, 250);
+  }
+})();
+
 /* ── Mobile detection & adaptive quality ──────────────── */
 const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
                || window.innerWidth <= 768;
