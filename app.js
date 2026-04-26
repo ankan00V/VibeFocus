@@ -1574,6 +1574,7 @@ function initAudioCtx() {
 
 function stopAllSound() {
   state._loadingSrc = null;
+  clearTimeout(state._audioTimer);
   // Stop HTML Audio element (legacy fallback if any)
   if (state._ambientAudio) {
     state._ambientAudio.pause();
@@ -1583,10 +1584,8 @@ function stopAllSound() {
   if (state._fadeTimer) { clearInterval(state._fadeTimer); state._fadeTimer = null; }
 
   // Stop any remaining Web Audio nodes
-  if (state.audioNodes['ambientSource']) {
-    try { state.audioNodes['ambientSource'].stop(); } catch(e) {}
-  }
   Object.values(state.audioNodes).forEach(n => {
+    try { n.stop && n.stop(); } catch(e) {}
     try { n.disconnect && n.disconnect(); } catch(e) {}
   });
   state.audioNodes = {};
@@ -1629,24 +1628,67 @@ async function playAmbientFile(src) {
      return;
   }
 
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  source.loop = true;
+  // Master gain for overall fade in/out
+  const masterGain = ctx.createGain();
+  masterGain.gain.value = 0;
+  masterGain.connect(ctx.destination);
+  state.audioNodes['ambientGain'] = masterGain;
 
-  const gainNode = ctx.createGain();
-  gainNode.gain.value = 0;
+  // Seamless Crossfade Looper
+  const CROSSFADE_TIME = 2.0; // seconds
+  let nextStartTime = ctx.currentTime;
+  let sourceIndex = 0;
+
+  function scheduleNext() {
+    if (state._loadingSrc !== src || !state.soundOn) return;
+    
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    
+    const sourceGain = ctx.createGain();
+    sourceGain.gain.value = 0;
+    
+    source.connect(sourceGain);
+    sourceGain.connect(masterGain);
+    
+    const duration = buffer.duration;
+    // if duration is too short for crossfade, adjust
+    const fadeTime = Math.min(CROSSFADE_TIME, duration / 2);
+    
+    // Fade in
+    sourceGain.gain.setValueAtTime(0, nextStartTime);
+    sourceGain.gain.linearRampToValueAtTime(1, nextStartTime + fadeTime);
+    
+    // Fade out
+    const stopTime = nextStartTime + duration;
+    sourceGain.gain.setValueAtTime(1, stopTime - fadeTime);
+    sourceGain.gain.linearRampToValueAtTime(0, stopTime);
+    
+    source.start(nextStartTime);
+    source.stop(stopTime);
+    
+    // Save to node list so we can disconnect/stop if needed
+    const nodeId = 'src_' + (sourceIndex++);
+    state.audioNodes[nodeId] = source;
+    
+    source.onended = () => {
+      try { source.disconnect(); } catch(e) {}
+      try { sourceGain.disconnect(); } catch(e) {}
+      delete state.audioNodes[nodeId];
+    };
+    
+    nextStartTime = stopTime - fadeTime;
+    
+    // Schedule next loop 2 seconds before it needs to start
+    const timeUntilNext = (nextStartTime - ctx.currentTime - 2) * 1000;
+    state._audioTimer = setTimeout(scheduleNext, Math.max(0, timeUntilNext));
+  }
   
-  source.connect(gainNode);
-  gainNode.connect(ctx.destination);
+  scheduleNext();
   
-  source.start(0);
-  
-  state.audioNodes['ambientSource'] = source;
-  state.audioNodes['ambientGain'] = gainNode;
-  
-  // Fade in smoothly
-  gainNode.gain.setValueAtTime(0, ctx.currentTime);
-  gainNode.gain.linearRampToValueAtTime(0.85, ctx.currentTime + 3);
+  // Fade in master smoothly
+  masterGain.gain.setValueAtTime(0, ctx.currentTime);
+  masterGain.gain.linearRampToValueAtTime(0.85, ctx.currentTime + 3);
 }
 
 btnSound.addEventListener('click', () => {
