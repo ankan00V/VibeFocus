@@ -1183,9 +1183,9 @@ body {
   pointer-events: none;
   opacity: 0;
   transition: opacity 1.2s cubic-bezier(0.16, 1, 0.3, 1);
-  transform: translate(0, -8vh) scale(1.15); /* Nudged up to sit between header and cards */
-  overflow: hidden;
-  clip-path: inset(0 0 60px 0); /* Crop bottom 60px to hide Spline watermark */
+  transform: translate(0, -8vh) scale(1.15);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 75%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 75%, transparent 100%);
 }
 
 /* Hide the Spline watermark logo from the Shadow DOM */
