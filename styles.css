@@ -1210,11 +1210,62 @@ body:has(#screen-vibe.active) #spline-bg {
   pointer-events: all;
 }
 
-/* Hide Spline 3D on mobile — WebGL is too heavy for mobile GPUs */
+/* Hide Spline 3D on mobile and show beautiful dynamic background instead */
 @media (max-width: 768px) and (pointer: coarse) {
-  #spline-bg {
+  #spline-bg, #spline-logo-cover {
     display: none !important;
   }
+  
+  /* Mobile-specific Aurora Gradient Animations */
+  #gradient-bg {
+    opacity: 1 !important;
+    background: radial-gradient(circle at 50% 0%, rgba(124, 58, 237, 0.15), transparent 60%),
+                radial-gradient(circle at 100% 100%, rgba(59, 130, 246, 0.15), transparent 70%);
+  }
+
+  /* Make the orbs much larger, more vibrant, and flow beautifully */
+  #gradient-bg::after {
+    opacity: 0.9;
+    width: 160vw;
+    height: 160vw;
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.35) 0%, transparent 60%);
+    animation: mobileAurora1 15s ease-in-out infinite alternate !important;
+  }
+
+  .bg-orb-2 {
+    opacity: 0.9;
+    width: 140vw;
+    height: 140vw;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 60%);
+    animation: mobileAurora2 18s ease-in-out infinite alternate !important;
+  }
+
+  .bg-orb-3 {
+    opacity: 0.8;
+    width: 150vw;
+    height: 150vw;
+    background: radial-gradient(circle, rgba(236, 72, 153, 0.2) 0%, transparent 60%); /* Pinkish/sunset hue */
+    animation: mobileAurora3 22s ease-in-out infinite alternate !important;
+  }
+}
+
+/* Aurora Keyframes */
+@keyframes mobileAurora1 {
+  0% { transform: translate(-30vw, -10vh) scale(1); }
+  50% { transform: translate(10vw, 20vh) scale(1.1); }
+  100% { transform: translate(-10vw, 40vh) scale(0.9); }
+}
+
+@keyframes mobileAurora2 {
+  0% { transform: translate(20vw, 50vh) scale(1); }
+  50% { transform: translate(-15vw, 20vh) scale(1.2); }
+  100% { transform: translate(15vw, -10vh) scale(0.8); }
+}
+
+@keyframes mobileAurora3 {
+  0% { transform: translate(0, 30vh) scale(1); }
+  50% { transform: translate(20vw, 50vh) scale(1.1); }
+  100% { transform: translate(-20vw, 10vh) scale(0.95); }
 }
 
 /* ── Screen layout ── */
