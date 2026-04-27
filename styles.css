@@ -1193,10 +1193,21 @@ body {
   display: none !important;
 }
 
+/* Cover element to hide Spline watermark at bottom-right */
+#spline-logo-cover {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  width: 220px;
+  height: 70px;
+  background: radial-gradient(ellipse at bottom right, var(--bg) 40%, transparent 100%);
+  z-index: 2;
+  pointer-events: none;
+}
+
 body:has(#screen-vibe.active) #spline-bg {
   opacity: 1;
   pointer-events: all;
-  /* Ensure the main focus character is visible by default */
 }
 
 /* Hide Spline 3D on mobile — WebGL is too heavy for mobile GPUs */
