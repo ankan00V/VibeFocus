@@ -2097,21 +2097,8 @@ function drawGallery(ctx, W, H, p, time) {
       ctx.textAlign = 'center';
       ctx.fillText('Painting unavailable', W / 2, H / 2);
     }
-
-  } else {
-    // ── loading state: gentle pulsing dot ──
-    if (!isPreview) {
-      const alpha = 0.3 + 0.2 * Math.sin(time * 3);
-      ctx.fillStyle = `rgba(212, 168, 83, ${alpha})`;
-      ctx.beginPath();
-      ctx.arc(W / 2, H / 2, 8, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.4)';
-      ctx.font = '13px Inter';
-      ctx.textAlign = 'center';
-      ctx.fillText('Loading artwork…', W / 2, H / 2 + 30);
-    }
   }
+    // No loading state UI is shown, it will just draw the background until the image fetches
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -2301,7 +2288,7 @@ function startAmbient(vibe) {
   if (vibe === 'ice')    src = 'sounds/rain.wav';
   if (vibe === 'candle') src = 'sounds/fire.wav';
   if (vibe === 'tree')   src = 'sounds/wind.wav';
-  if (vibe === 'gallery')src = ''; // No sound for gallery initially
+  if (vibe === 'gallery')src = 'sounds/slow-piano-music.mp3';
   
   if (src) {
     state._loadingSrc = src;

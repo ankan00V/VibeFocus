@@ -1,50 +1,44 @@
 # VIBEFOCUS 🕯️
 
-> **"Focus isn't tracked. It's experienced."**
+> "Focus isn't tracked. It's experienced."
 
-VibeFocus is a premium, immersive focus timer designed for minimalist work states. Unlike traditional productivity trackers, VibeFocus replaces rigid countdowns with organic, physics-based visualizers that allow time to fade away into the background.
+🌍 **Live App:** [https://vibe-focus-three.vercel.app](https://vibe-focus-three.vercel.app)
 
-vibe-focus-three.vercel.app
+## What is VibeFocus?
 
-## ✨ Features
+VibeFocus is a premium, immersive Pomodoro timer designed for minimalist work states. Unlike traditional productivity trackers that stress you out with rigid countdowns and glaring numbers, VibeFocus replaces ticking clocks with organic, physics-based visualizers and cinematic ambient soundscapes. 
 
-- **Organic Multi-Sensory "Vibes"**:
-    - 💧 **Water Bowl**: A physics-accurate simulation of a bowl filling drop by drop.
-    - 🕯️ **Candle**: Realistic wax melting and flame physics that respond to your duration.
-    - 🌳 **Autumn Tree**: A calming leaf-fall simulation where each leaf represents a moment of focus.
-- **Immersive 3D Environment**: Powered by Spline, featuring an interactive background that frames the experience.
-- **Dynamic Ambient Audio**: Procedural sound generators (Wind, Fire, Water) that sync with your chosen vibe.
-- **Cinematic UI/UX**: High-end glassmorphism design with fluid typography and smooth screen transitions.
-- **Mobile Optimized**: Fully responsive experience optimized for touch and portrait framing.
-- **Custom Timer Support**: Set exact focus durations with a precision custom input.
+## The Purpose
 
-## 🚀 Getting Started
+The goal of VibeFocus is to allow time to fade away into the background. By removing the anxiety of a numerical clock and replacing it with a natural progression (like a candle melting or a bowl filling with water), you can easily enter a state of "deep work" and hyper-focus without constant distraction.
 
-### Prerequisites
-- A modern web browser with WebGL support.
-- No installation required. Just open `index.html`.
+## The Modes (Vibes)
 
-### Local Setup
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/your-username/vibefocus.git
-   ```
-2. Open `index.html` in your browser.
+VibeFocus features four distinct focus modes, each offering a unique sensory experience to help you concentrate:
 
-## 🛠️ Built With
+### 💧 Water Bowl Mode
+A physics-accurate simulation of a bowl filling drop by drop.
+* **How it works:** As your focus session progresses, water droplets fall and slowly fill the bowl. The ambient sound of gentle rain accompanies this mode to keep you grounded.
 
-- **HTML5 & Vanilla CSS**: Core structure and premium design system.
-- **JavaScript (Vanilla)**: Physics engine, audio synthesis, and transition logic.
-- **Three.js / Spline**: Interactive 3D background elements.
-- **Web Audio API**: Procedural sound generation (no large MP3 files).
+### 🕯️ Candle Mode
+Realistic wax melting and flame physics.
+* **How it works:** A candle burns down organically over the duration of your timer, complete with melting wax and flickering flames. It is accompanied by the soothing sound of a crackling fire.
 
-## 🧠 Behind the Physics
+### 🌳 Autumn Tree Mode
+A calming leaf-fall simulation.
+* **How it works:** Each leaf falling from the tree represents a moment of focus. As time passes, the tree gracefully sheds its leaves. Paired with a calming wind soundscape.
 
-Each vibe in VibeFocus is powered by a custom lightweight physics engine:
-- **Wax Physics**: Simulates layered accumulation and random drip paths using non-uniform melting logic.
-- **Drip System**: Uses collision-aware particle logic to fill the water bowl organically.
-- **Leaf-Fall**: Uses smooth-noise (Sines) for organic, non-repetitive drifting behavior.
+### 🎨 Painting (Gallery) Mode
+An interactive art experience.
+* **How it works:** Instead of physics animations, this mode slowly unveils a gallery of classic masterworks (Monet, Van Gogh, Vermeer) as you focus. It is accompanied by slow, calming piano music, offering an elegant visual and auditory reward.
+
+## How to Use VibeFocus
+
+1. **Open the App:** Visit [vibe-focus-three.vercel.app](https://vibe-focus-three.vercel.app) on your browser.
+2. **Select your Vibe:** Choose one of the four modes (Water, Candle, Tree, or Painting) that best matches your current mood.
+3. **Set your Duration:** Pick a preset time interval (e.g., the classic 25-minute Pomodoro) or set a custom duration for your session.
+4. **Immerse Yourself:** Start the timer. The cinematic background loops and ambient audio will begin, and the numbers will fade away, leaving only the organic visualizer.
+5. **Completion:** When the visualizer completes its cycle (e.g., the candle is fully melted), your session is successfully done.
 
 ---
-
 Designed with 💜 for deep work and mindfulness.
