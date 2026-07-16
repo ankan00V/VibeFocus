@@ -55,7 +55,7 @@ const state = {
 
 /* ── DOM ────────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
-const screens   = { vibe: $('screen-vibe'), duration: $('screen-duration'), focus: $('screen-focus'), complete: $('screen-complete') };
+const screens   = { hero: $('screen-hero'), vibe: $('screen-vibe'), duration: $('screen-duration'), focus: $('screen-focus'), complete: $('screen-complete') };
 const focusCanvas  = $('focus-canvas');
 const focusCtx     = focusCanvas.getContext('2d');
 const confCanvas   = $('confetti-canvas');
@@ -73,6 +73,267 @@ const btnRestart   = $('btn-restart');
 const vibeLabel    = $('selected-vibe-label');
 const completeStat = $('complete-time-display');
 const fadeOverlay  = $('fade-overlay');
+
+/* ── Hero Screen Logic — Seamless Video Loop Engine ── */
+const btnHowItWorks = document.querySelectorAll('.btn-how-it-works');
+const hiwModal = document.getElementById('how-it-works-modal');
+const hiwCloseBtn = document.getElementById('hiw-close-btn');
+const heroSlots = document.querySelectorAll('.hero-vid-slot');
+const vidSwitches = document.querySelectorAll('.vid-switch');
+const heroContent = document.getElementById('hero-content');
+const heroMobileMenuBtn = document.getElementById('hero-mobile-menu-btn');
+const heroMobileMenu = document.getElementById('hero-mobile-menu');
+const heroTitle = document.getElementById('hero-title');
+const heroSubtitle = document.getElementById('hero-subtitle');
+const btnHeroStartFocus = document.getElementById('btn-hero-start');
+
+const HERO_VIBES = [
+  {
+    vibe: 'candle',
+    title: 'A Flicker of Focus',
+    subtext: 'The world fades away as the flame burns steady. Anchor your attention and find warmth in deep work.'
+  },
+  {
+    vibe: 'ice',
+    title: 'Drop by Drop',
+    subtext: 'Time flows gently as you work. Each drop is a moment of presence, building a reservoir of accomplishment.'
+  },
+  {
+    vibe: 'tree',
+    title: 'Rooted in the Present',
+    subtext: 'Grow your ideas in the quiet of the forest. Let distractions drift away like leaves on the wind.'
+  },
+  {
+    vibe: 'gallery',
+    title: 'Canvas of Time',
+    subtext: 'Every minute is a brushstroke. Craft your masterpiece with calm, deliberate attention.'
+  }
+];
+
+/**
+ * Seamless Loop Engine
+ * ────────────────────
+ * Each slot has two identical <video> elements: layer-a and layer-b.
+ * - Only one plays at a time (the "active" layer).
+ * - When the active layer is ~CROSSFADE_LEAD seconds from ending,
+ *   the standby layer starts from 0 and fades in while the active fades out.
+ * - Once crossfade completes, roles swap for the next cycle.
+ * - Result: zero black-flash, perfectly seamless loop.
+ */
+const CROSSFADE_LEAD = 1.5;  // seconds before end to begin crossfade
+const CROSSFADE_MS   = 1400; // duration of the opacity transition
+
+// State per slot
+const slotState = [];
+
+heroSlots.forEach((slot, idx) => {
+  const a = slot.querySelector('.layer-a');
+  const b = slot.querySelector('.layer-b');
+
+  const s = {
+    slot,
+    layers: [a, b],
+    activeIdx: 0,      // which layer is currently playing (0=a, 1=b)
+    crossfading: false, // guard to prevent double-trigger
+  };
+  slotState.push(s);
+
+  // Set up timeupdate listener on both layers
+  [a, b].forEach((vid, layerIdx) => {
+    vid.addEventListener('timeupdate', () => {
+      if (s.crossfading) return;
+      if (!vid.duration || vid.duration === Infinity) return;
+      if (s.activeIdx !== layerIdx) return; // only the active layer triggers
+
+      const remaining = vid.duration - vid.currentTime;
+      if (remaining <= CROSSFADE_LEAD && remaining > 0) {
+        beginCrossfade(s);
+      }
+    });
+
+    // Safety: if 'ended' fires before crossfade completes (short video edge case)
+    vid.addEventListener('ended', () => {
+      if (s.activeIdx === layerIdx && !s.crossfading) {
+        // Immediately restart this layer to avoid black
+        vid.currentTime = 0;
+        vid.play().catch(() => {});
+      }
+    });
+  });
+});
+
+function beginCrossfade(s) {
+  s.crossfading = true;
+
+  const oldIdx = s.activeIdx;
+  const newIdx = oldIdx === 0 ? 1 : 0;
+  const oldVid = s.layers[oldIdx];
+  const newVid = s.layers[newIdx];
+
+  // Prepare standby layer at frame 0
+  newVid.currentTime = 0;
+  newVid.play().catch(() => {});
+
+  // Crossfade: bring new layer in, fade old layer out
+  newVid.style.transition = `opacity ${CROSSFADE_MS}ms ease-in-out`;
+  oldVid.style.transition = `opacity ${CROSSFADE_MS}ms ease-in-out`;
+
+  // Use rAF to ensure the transition applies after the styles are set
+  requestAnimationFrame(() => {
+    newVid.style.opacity = '1';
+    newVid.style.zIndex  = '2';
+    oldVid.style.opacity = '0';
+    oldVid.style.zIndex  = '1';
+  });
+
+  // After crossfade completes, clean up
+  setTimeout(() => {
+    oldVid.pause();
+    oldVid.currentTime = 0;
+    oldVid.style.transition = '';
+    newVid.style.transition = '';
+    s.activeIdx = newIdx;
+    s.crossfading = false;
+  }, CROSSFADE_MS + 100);
+}
+
+// Start the first slot's video playing
+function activateSlot(idx) {
+  heroSlots.forEach((slot, i) => {
+    if (i === idx) {
+      slot.classList.add('active-slot');
+      // Play the active layer of this slot
+      const s = slotState[i];
+      const activeVid = s.layers[s.activeIdx];
+      activeVid.currentTime = 0;
+      activeVid.play().catch(() => {});
+    } else {
+      slot.classList.remove('active-slot');
+      // Pause both layers of inactive slots
+      const s = slotState[i];
+      s.layers.forEach(v => { v.pause(); v.currentTime = 0; });
+      // Reset to layer-a as primary
+      s.activeIdx = 0;
+      s.crossfading = false;
+      s.layers[0].style.opacity = '1';
+      s.layers[0].style.zIndex  = '2';
+      s.layers[1].style.opacity = '0';
+      s.layers[1].style.zIndex  = '1';
+    }
+  });
+}
+
+// Boot first slot
+activateSlot(0);
+
+function startHeroFocusSession() {
+  // Find which video slot is active
+  let activeVidId = 0;
+  vidSwitches.forEach(btn => {
+    if (btn.classList.contains('active')) {
+      activeVidId = parseInt(btn.dataset.vid, 10);
+    }
+  });
+  
+  // Set the selected vibe in the app state
+  state.vibe = HERO_VIBES[activeVidId].vibe;
+  
+  // The aesthetic names for the duration screen
+  const aestheticNames = ['Golden Hour', 'Still Water', 'Deep Woods', 'Quiet Dawn'];
+  
+  // Update the UI if the user ever goes to the vibe screen
+  document.querySelectorAll('.vibe-card').forEach(c => c.classList.remove('selected'));
+  const selectedBtn = document.getElementById('vibe-' + state.vibe);
+  if (selectedBtn) {
+    selectedBtn.classList.add('selected');
+  } 
+  
+  // Set the duration screen label to the aesthetic name
+  vibeLabel.textContent = (aestheticNames[activeVidId] || state.vibe).toUpperCase();
+  
+  // Go straight to duration screen
+  goTo('duration', true);
+}
+
+btnHowItWorks.forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (hiwModal) hiwModal.classList.add('active');
+  });
+});
+if (hiwCloseBtn) {
+  hiwCloseBtn.addEventListener('click', () => {
+    if (hiwModal) hiwModal.classList.remove('active');
+  });
+}
+// Close on outside click
+if (hiwModal) {
+  hiwModal.addEventListener('click', (e) => {
+    if (e.target === hiwModal) hiwModal.classList.remove('active');
+  });
+}
+if (btnHeroStartFocus) {
+  btnHeroStartFocus.addEventListener('click', () => {
+    startHeroFocusSession();
+  });
+}
+
+vidSwitches.forEach(btn => {
+  btn.addEventListener('click', () => {
+    const vidId = parseInt(btn.dataset.vid, 10);
+    activateSlot(vidId);
+
+    // Update active button state
+    vidSwitches.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Update hero copy based on selected vibe
+    if (heroTitle && heroSubtitle && HERO_VIBES[vidId]) {
+      heroTitle.innerHTML = HERO_VIBES[vidId].title;
+      heroSubtitle.innerHTML = HERO_VIBES[vidId].subtext;
+    }
+
+    // Handle dark mode for "Deep Woods" (index 2)
+    if (vidId === 2) {
+      heroContent.classList.remove('theme-light');
+      heroContent.classList.add('theme-dark');
+    } else {
+      heroContent.classList.remove('theme-dark');
+      heroContent.classList.add('theme-light');
+    }
+  });
+});
+
+if (heroMobileMenuBtn) {
+  heroMobileMenuBtn.addEventListener('click', () => {
+    const isOpen = heroMobileMenuBtn.classList.contains('open');
+    if (isOpen) {
+      heroMobileMenuBtn.classList.remove('open');
+      heroMobileMenu.style.display = 'none';
+    } else {
+      heroMobileMenuBtn.classList.add('open');
+      heroMobileMenu.style.display = 'block';
+    }
+  });
+}
+
+// ── Keep ALL hero videos playing ──
+function forcePlayAllHeroVideos() {
+  const allVids = document.querySelectorAll('.hero-video');
+  allVids.forEach(vid => {
+    vid.muted = true;
+    if (vid.paused) vid.play().catch(() => {});
+  });
+}
+
+// Re-play when tab becomes visible again (browser pauses background tabs)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) forcePlayAllHeroVideos();
+});
+
+// First user interaction fallback for strict autoplay browsers
+document.addEventListener('click', forcePlayAllHeroVideos, { once: true });
+document.addEventListener('touchstart', forcePlayAllHeroVideos, { once: true });
 
 /* ══════════════════════════════════════════════════════════
    Screen Transition
@@ -103,6 +364,20 @@ function goTo(name, zoomExit = false) {
         }
       }
       screens[name].classList.add('active');
+
+      // Ensure the global video background and png overlays are only visible on the hero screen
+      const heroBg = document.querySelector('.hero-bg');
+      const heroOverlays = document.querySelectorAll('.hero-overlay-png');
+      
+      if (heroBg) {
+        if (name === 'hero') {
+          heroBg.style.opacity = '1';
+          heroBg.style.visibility = 'visible';
+        } else {
+          heroBg.style.opacity = '0';
+          heroBg.style.visibility = 'hidden';
+        }
+      }
 
       // Fade back in
       requestAnimationFrame(() => {
@@ -167,12 +442,22 @@ document.querySelectorAll('.dur-pill').forEach(pill => {
       const input = document.getElementById('custom-minutes');
       state.minutes = parseInt(input.value, 10);
       if (e.target !== input) input.focus();
+      // Update dial display for custom value
+      updateDialCustom(input.value);
     } else {
       state.minutes = parseInt(pill.dataset.minutes, 10);
     }
     btnStart.disabled = false;
   });
 });
+
+/* Helper to update dial display for custom minutes */
+function updateDialCustom(val) {
+  const dialTime = document.querySelector('.dial-display-time');
+  if (dialTime) {
+    dialTime.setAttribute('data-custom-val', val || '—');
+  }
+}
 
 const customInput = document.getElementById('custom-minutes');
 if (customInput) {
@@ -186,11 +471,12 @@ if (customInput) {
     if(val < 1) { val = 1; customInput.value = 1; }
     if(document.getElementById('dur-custom').classList.contains('selected')) {
       state.minutes = val;
+      updateDialCustom(val);
     }
   });
 }
 
-btnBack.addEventListener('click', () => goTo('vibe'));
+btnBack.addEventListener('click', () => goTo('hero'));
 
 btnStart.addEventListener('click', () => {
   if (!state.minutes) return;
@@ -220,6 +506,7 @@ async function launchFocus() {
     drawTree._motes    = null;
     drawTree._lastGust = -1;   // reset gust timer so first gust fires at t=50s
   }
+  if (typeof GALLERY !== 'undefined') { GALLERY.initd = false; }
   await goTo('focus');
   resizeFocusCanvas();
   tryFullscreen();
@@ -294,14 +581,14 @@ function stopSession() {
 /* ── Exit ── */
 btnExit.addEventListener('click', () => {
   stopSession();
-  goTo('vibe');
+  goTo('hero');
 });
 
 /* ── Restart ── */
 btnRestart.addEventListener('click', () => {
   cancelAnimationFrame(state.confettiRaf);
   state.confettiRaf = null;
-  goTo('vibe');
+  goTo('hero');
 });
 
 /* ══════════════════════════════════════════════════════════
@@ -355,6 +642,7 @@ function drawVibe(ctx, W, H, progress, vibe, time) {
   if (vibe === 'ice')    drawWaterBowl(ctx, W, H, progress, time);
   if (vibe === 'candle') drawCandle(ctx, W, H, progress, time);
   if (vibe === 'tree')   drawTree(ctx, W, H, progress, time);
+  if (vibe === 'gallery')drawGallery(ctx, W, H, progress, time);
 }
 
 /* ── helpers ── */
@@ -1465,6 +1753,368 @@ function drawLeaf(ctx, x, y, size, color, rot, alpha) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   GALLERY — Organic Ink Bloom Reveal
+   A painting is covered by a frosted layer. Over the session,
+   soft overlapping "ink blooms" (radial gradients) grow
+   randomly across the canvas to reveal the painting underneath.
+══════════════════════════════════════════════════════════ */
+
+const GALLERY = {
+  initd: false,
+  image: null,
+  loaded: false,
+  error: false,
+
+  artworks: [
+    { id: 'starry',      src: 'paintings/starry-night.jpeg',        title: 'The Starry Night',              artist: 'Vincent van Gogh',      year: '1889' },
+    { id: 'wheat',       src: 'paintings/wheat-field-cypresses.jpeg',title: 'Wheat Field with Cypresses',    artist: 'Vincent van Gogh',      year: '1889' },
+    { id: 'boulevard',   src: 'paintings/boulevard-montmartre.jpeg', title: 'Boulevard Montmartre',          artist: 'Camille Pissarro',      year: '1897' },
+    { id: 'waterlilies', src: 'paintings/water-lilies.jpeg',         title: 'Water Lilies',                  artist: 'Claude Monet',          year: '1906' },
+    { id: 'bridge',      src: 'paintings/japanese-bridge.jpeg',      title: 'The Water Lily Pond',           artist: 'Claude Monet',          year: '1900' },
+    { id: 'almond',      src: 'paintings/almond-blossoms.jpeg',      title: 'Almond Blossoms',              artist: 'Vincent van Gogh',      year: '1890' },
+    { id: 'luncheon',    src: 'paintings/luncheon-boating.jpeg',     title: 'Luncheon of the Boating Party', artist: 'Pierre-Auguste Renoir', year: '1881' },
+    { id: 'wave',        src: 'paintings/great-wave.jpeg',           title: 'The Great Wave off Kanagawa',   artist: 'Katsushika Hokusai',    year: '1831' },
+    { id: 'pearl',       src: 'paintings/girl-pearl-earring.jpeg',   title: 'Girl with a Pearl Earring',     artist: 'Johannes Vermeer',      year: '1665' },
+  ],
+
+  currentArt: null,
+
+  // Reveal state
+  blobs: [],                // Array of {x, y, maxR}
+  placardShownAt: 0,        // time the placard started fading in (0 = not yet)
+  
+  // Offscreen canvas for the mask
+  maskCanvas: null,
+  maskCtx: null
+};
+
+/* ── seeded PRNG (mulberry32) ── */
+function _gallerySeed(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(31, h) + str.charCodeAt(i) | 0;
+  }
+  return h >>> 0;
+}
+function _galleryRng(seed) {
+  let s = seed | 0;
+  return function () {
+    s = s + 0x6d2b79f5 | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ── pick a painting, avoiding immediate repeat via localStorage ── */
+function _galleryPickPainting() {
+  const pool = GALLERY.artworks;
+  let lastId = '';
+  try { lastId = localStorage.getItem('vf_lastGalleryId') || ''; } catch (_) {}
+
+  let candidates = pool.filter(a => a.id !== lastId);
+  if (candidates.length === 0) candidates = pool;
+
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  try { localStorage.setItem('vf_lastGalleryId', chosen.id); } catch (_) {}
+  return chosen;
+}
+
+function galleryReset() {
+  GALLERY.initd = true;
+  GALLERY.loaded = false;
+  GALLERY.error = false;
+  GALLERY.placardShownAt = 0;
+
+  // Pick painting
+  GALLERY.currentArt = _galleryPickPainting();
+
+  // Load image
+  GALLERY.image = new Image();
+  GALLERY.image.src = GALLERY.currentArt.src;
+  GALLERY.image.onload = () => { GALLERY.loaded = true; };
+  GALLERY.image.onerror = () => { GALLERY.error = true; };
+
+  // ── Derive blob count M from session duration ──
+  // M scales from 300 to 1500.
+  const totalSecs = state.totalSeconds || 60;
+  const targetM = Math.max(300, Math.min(1500, Math.round(totalSecs * 15)));
+
+  // Calculate best grid dimensions for M (assume roughly 16:9 screen)
+  const cols = Math.ceil(Math.sqrt(targetM * 1.77)); 
+  const rows = Math.ceil(targetM / cols);
+  
+  GALLERY.cols = cols;
+  GALLERY.rows = rows;
+
+  const sessionSeed = _gallerySeed(GALLERY.currentArt.id + Date.now().toString());
+  const rng = _galleryRng(sessionSeed);
+  
+  const blobs = [];
+  
+  // ── Build jittered grid ──
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cx = (c + 0.5) / cols;
+      const cy = (r + 0.5) / rows;
+      
+      // Jitter position ±40% of cell size
+      const jx = (rng() - 0.5) * 0.8 / cols;
+      const jy = (rng() - 0.5) * 0.8 / rows;
+      
+      // Generate a cluster of drops for a true watercolor splash effect
+      const drops = [];
+      
+      // Core drop
+      drops.push({
+        dx: 0, dy: 0,
+        // High variance so splashes range from very small to medium-large
+        rMult: 0.2 + 1.2 * rng() 
+      });
+      
+      // Satellite drops: pushed outwards for organic splatter texture
+      const numSats = 2 + Math.floor(rng() * 8); // 2 to 9 satellites for high variety
+      for (let s = 0; s < numSats; s++) {
+        const angle = rng() * Math.PI * 2;
+        // Distribute satellites further out to create spindly splash arms
+        const dist = 0.5 + 0.7 * rng(); 
+        const satR = 0.2 + 0.3 * rng(); 
+        
+        drops.push({
+          dx: Math.cos(angle) * dist,
+          dy: Math.sin(angle) * dist,
+          rMult: satR
+        });
+      }
+      
+      blobs.push({ x: cx + jx, y: cy + jy, drops: drops });
+    }
+  }
+
+  // Shuffle the blobs independent of position (determines reveal order)
+  const rngShuffle = _galleryRng(sessionSeed + 1);
+  for (let i = blobs.length - 1; i > 0; i--) {
+    const j = Math.floor(rngShuffle() * (i + 1));
+    [blobs[i], blobs[j]] = [blobs[j], blobs[i]];
+  }
+  
+  GALLERY.blobs = blobs;
+}
+
+function drawGallery(ctx, W, H, p, time) {
+  if (!GALLERY.initd) galleryReset();
+  const isPreview = W < 300;
+
+  // ── background ──
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, W, H);
+
+  // ── draw painting (cover-fit) ──
+  if (GALLERY.loaded) {
+    const img = GALLERY.image;
+    const imgR = img.width / img.height;
+    const canR = W / H;
+    let dw, dh, dx, dy;
+    if (canR > imgR) { dw = W; dh = W / imgR; dx = 0; dy = (H - dh) / 2; }
+    else             { dh = H; dw = H * imgR; dy = 0; dx = (W - dw) / 2; }
+    ctx.drawImage(img, dx, dy, dw, dh);
+
+    // ── Safety net: crossfade entire cover at the end ──
+    // At p=0.95, it's fully opaque. By p=1.0, it's 0.
+    const globalCoverOpacity = p > 0.95 ? 1 - (p - 0.95) * 20 : 1;
+    
+    if (globalCoverOpacity > 0.005) {
+      if (!GALLERY.maskCanvas) {
+        GALLERY.maskCanvas = document.createElement('canvas');
+        GALLERY.maskCtx = GALLERY.maskCanvas.getContext('2d', { willReadFrequently: true });
+      }
+      if (GALLERY.maskCanvas.width !== W || GALLERY.maskCanvas.height !== H) {
+        GALLERY.maskCanvas.width = W;
+        GALLERY.maskCanvas.height = H;
+      }
+      
+      const mCtx = GALLERY.maskCtx;
+      
+      // 1. Fill mask canvas with the frosted cover
+      mCtx.globalCompositeOperation = 'source-over';
+      mCtx.fillStyle = 'rgba(12, 12, 14, 0.88)';
+      mCtx.fillRect(0, 0, W, H);
+      
+      // Subtle sheen on the frosted cover
+      const sheen = mCtx.createLinearGradient(0, 0, W, H);
+      sheen.addColorStop(0, 'rgba(255, 255, 255, 0.06)');
+      sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0.02)');
+      sheen.addColorStop(1, 'rgba(255, 255, 255, 0.04)');
+      mCtx.fillStyle = sheen;
+      mCtx.fillRect(0, 0, W, H);
+
+      // 2. Erase holes where blooms have expanded
+      mCtx.globalCompositeOperation = 'destination-out';
+      
+      const N = GALLERY.blobs.length;
+      // We want ~3.5 blobs actively growing at any time
+      const activeWidth = Math.max(0.05, 3.5 / N);
+      
+      for (let i = 0; i < N; i++) {
+        const blob = GALLERY.blobs[i];
+        
+        // Map blob i's growth across the ENTIRE timer so the last one finishes exactly at p=0.99
+        // This guarantees 100% reveal just before the timer UI hits 0:00
+        const startP = (i / Math.max(1, N - 1)) * (0.99 - activeWidth);
+        const endP = startP + activeWidth;
+        
+        let t = 0;
+        if (isPreview) {
+          // In preview, blobs are fully bloomed or hidden based on progress
+          // Speed up the preview reveal so it loops nicely
+          t = (p * 1.5) > (i / N) ? 1 : 0;
+        } else {
+          t = (p - startP) / (endP - startP);
+          t = Math.max(0, Math.min(1, t));
+        }
+        
+        if (t > 0) {
+          // Cubic ease-out for a fast start, slow organic finish
+          const ease = 1 - Math.pow(1 - t, 3);
+          
+          const cellW = W / GALLERY.cols;
+          const cellH = H / GALLERY.rows;
+          
+          // Use cellDiag / 2 as base radius so the splatters stay contained mostly to their own cells.
+          // The combined overlap of all cells guarantees 100% geometric coverage without prematurely revealing the screen.
+          const cellDiag = Math.sqrt(cellW * cellW + cellH * cellH);
+          const baseRadius = cellDiag / 2;
+          
+          const bx = blob.x * W;
+          const by = blob.y * H;
+          
+          for (let d = 0; d < blob.drops.length; d++) {
+            const drop = blob.drops[d];
+            const dropR = baseRadius * drop.rMult * ease;
+            
+            if (dropR > 0.5) {
+              // Scale positional offsets by ease so droplets spread outward dynamically!
+              const dropX = bx + drop.dx * baseRadius * ease;
+              const dropY = by + drop.dy * baseRadius * ease;
+              
+              const grad = mCtx.createRadialGradient(dropX, dropY, 0, dropX, dropY, dropR);
+              // Core drop and satellites are solidly opaque for most of their radius to create distinct droplets, 
+              // with just enough soft bleed at the edges to look like watercolor on canvas
+              grad.addColorStop(0, 'rgba(0,0,0,1)');
+              grad.addColorStop(d === 0 ? 0.75 : 0.6, 'rgba(0,0,0,1)');
+              grad.addColorStop(0.9, 'rgba(0,0,0,0.8)');
+              grad.addColorStop(1, 'rgba(0,0,0,0)');
+              
+              mCtx.fillStyle = grad;
+              mCtx.beginPath();
+              mCtx.arc(dropX, dropY, dropR, 0, Math.PI * 2);
+              mCtx.fill();
+            }
+          }
+        }
+      }
+      
+      // 3. Draw the masked cover over the main canvas
+      ctx.save();
+      if (p > 0.95 && !isPreview) {
+        // Fade out any remaining un-splattered frosted glass over the last 5% of the session
+        // This guarantees that exactly at the last second, the painting is 100% visible
+        const fadeP = (p - 0.95) / 0.05; 
+        ctx.globalAlpha = Math.max(0, 1.0 - fadeP);
+      } else {
+        ctx.globalAlpha = 1.0;
+      }
+      ctx.drawImage(GALLERY.maskCanvas, 0, 0);
+      ctx.restore();
+    }
+
+    // ── subtle vignette on the revealed painting ──
+    const vigCx = W / 2, vigCy = H / 2;
+    const vignette = ctx.createRadialGradient(vigCx, vigCy, Math.min(W, H) * 0.35, vigCx, vigCy, Math.max(W, H) * 0.85);
+    vignette.addColorStop(0, 'transparent');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.35)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, W, H);
+
+    // ── museum placard (fades in ~1s after last blob finishes, around p=0.98) ──
+    if (!isPreview && p >= 0.98) {
+      if (GALLERY.placardShownAt === 0) GALLERY.placardShownAt = time;
+      const elapsed = time - GALLERY.placardShownAt;
+      const placardAlpha = Math.min(1, elapsed / 1.0);  // 1-second fade
+
+      if (placardAlpha > 0.01) {
+        ctx.save();
+        ctx.globalAlpha = placardAlpha;
+
+        // Placard background — frosted dark panel at bottom-right
+        const pW = Math.min(340, W * 0.45);
+        const pH = 72;
+        const pX = W - pW - 24;
+        const pY = H - pH - 24;
+        const pR = 8; // border-radius
+
+        ctx.beginPath();
+        ctx.moveTo(pX + pR, pY);
+        ctx.lineTo(pX + pW - pR, pY);
+        ctx.quadraticCurveTo(pX + pW, pY, pX + pW, pY + pR);
+        ctx.lineTo(pX + pW, pY + pH - pR);
+        ctx.quadraticCurveTo(pX + pW, pY + pH, pX + pW - pR, pY + pH);
+        ctx.lineTo(pX + pR, pY + pH);
+        ctx.quadraticCurveTo(pX, pY + pH, pX, pY + pH - pR);
+        ctx.lineTo(pX, pY + pR);
+        ctx.quadraticCurveTo(pX, pY, pX + pR, pY);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(10, 10, 12, 0.82)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(212, 168, 83, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Title
+        ctx.textAlign = 'left';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '500 16px Inter';
+        ctx.fillText(GALLERY.currentArt.title, pX + 16, pY + 28);
+
+        // Artist + year
+        ctx.fillStyle = 'rgba(212, 168, 83, 0.9)';
+        ctx.font = '400 12px Inter';
+        ctx.fillText(`${GALLERY.currentArt.artist}, ${GALLERY.currentArt.year}`, pX + 16, pY + 50);
+
+        ctx.restore();
+      }
+    }
+
+  } else if (GALLERY.error) {
+    // ── error state ──
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, W, H);
+    if (!isPreview) {
+      ctx.fillStyle = '#555';
+      ctx.font = '14px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText('Painting unavailable', W / 2, H / 2);
+    }
+
+  } else {
+    // ── loading state: gentle pulsing dot ──
+    if (!isPreview) {
+      const alpha = 0.3 + 0.2 * Math.sin(time * 3);
+      ctx.fillStyle = `rgba(212, 168, 83, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(W / 2, H / 2, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font = '13px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillText('Loading artwork…', W / 2, H / 2 + 30);
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
    VIBE PREVIEW ANIMATIONS (looped, on selection screen)
 ══════════════════════════════════════════════════════════ */
 // Preview canvases loop slowly at ~15% melt progress to show the animation
@@ -1478,6 +2128,7 @@ const previews = {
   ice:    { canvas: $('preview-ice'),    ctx: null },
   candle: { canvas: $('preview-candle'), ctx: null },
   tree:   { canvas: $('preview-tree'),   ctx: null },
+  gallery:{ canvas: $('preview-gallery'),ctx: null },
 };
 
 Object.entries(previews).forEach(([k, v]) => {
@@ -1505,6 +2156,7 @@ function animatePreviews(ts) {
     if (vibe === 'ice')    drawWaterBowl(ctx, W, H, pp, t);
     if (vibe === 'candle') drawCandle(ctx, W, H, pp, t);
     if (vibe === 'tree')   drawTree(ctx, W, H, pp, t);
+    if (vibe === 'gallery')drawGallery(ctx, W, H, pp, t);
   });
 }
 
@@ -1649,6 +2301,7 @@ function startAmbient(vibe) {
   if (vibe === 'ice')    src = 'sounds/rain.wav';
   if (vibe === 'candle') src = 'sounds/fire.wav';
   if (vibe === 'tree')   src = 'sounds/wind.wav';
+  if (vibe === 'gallery')src = ''; // No sound for gallery initially
   
   if (src) {
     state._loadingSrc = src;
