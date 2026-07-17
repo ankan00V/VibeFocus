@@ -529,6 +529,11 @@ function tickFocus(now) {
   }
   _lastFocusFrame = now;
 
+  // Stall the timer from starting if the painting is still fetching
+  if (state.vibe === 'gallery' && typeof GALLERY !== 'undefined' && !GALLERY.loaded) {
+    state.startTime = now;
+  }
+
   const elapsed  = Math.min((now - state.startTime) / 1000, state.totalSeconds);
   const prog = elapsed / state.totalSeconds;
 
