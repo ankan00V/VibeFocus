@@ -2102,8 +2102,36 @@ function drawGallery(ctx, W, H, p, time) {
       ctx.textAlign = 'center';
       ctx.fillText('Painting unavailable', W / 2, H / 2);
     }
+  } else {
+    // ── loading state: elegant breathing ripple ──
+    ctx.fillStyle = '#0a0a0c'; // Deep elegant background
+    ctx.fillRect(0, 0, W, H);
+    
+    if (!isPreview) {
+      // Breathing inner dot
+      const alphaInner = 0.3 + 0.4 * Math.sin(time * 2.5);
+      ctx.fillStyle = `rgba(212, 168, 83, ${alphaInner})`;
+      ctx.beginPath();
+      ctx.arc(W / 2, H / 2, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Expanding outer ripple
+      const r = (time * 18) % 45;
+      const alphaOuter = Math.max(0, 1 - (r / 45));
+      ctx.strokeStyle = `rgba(212, 168, 83, ${alphaOuter * 0.6})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(W / 2, H / 2, 3 + r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.font = '300 11px Inter';
+      ctx.textAlign = 'center';
+      if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '4px';
+      ctx.fillText('PREPARING CANVAS', W / 2, H / 2 + 45);
+      if (ctx.letterSpacing !== undefined) ctx.letterSpacing = '0px';
+    }
   }
-    // No loading state UI is shown, it will just draw the background until the image fetches
 }
 
 /* ══════════════════════════════════════════════════════════
