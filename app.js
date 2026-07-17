@@ -251,6 +251,17 @@ function startHeroFocusSession() {
   // Set the duration screen label to the aesthetic name
   vibeLabel.textContent = (aestheticNames[activeVidId] || state.vibe).toUpperCase();
   
+  // Clear selected classes from all .dur-pill elements, reset state.minutes, and disable start button
+  document.querySelectorAll('.dur-pill').forEach(p => p.classList.remove('selected'));
+  const screenDuration = document.getElementById('screen-duration');
+  if (screenDuration) {
+    const classesToRemove = Array.from(screenDuration.classList).filter(c => c.startsWith('dur-selected-'));
+    classesToRemove.forEach(c => screenDuration.classList.remove(c));
+  }
+  state.minutes = null;
+  if (btnStart) btnStart.disabled = true;
+  updateDialCustom('');
+
   // Go straight to duration screen
   goTo('duration', true);
 }
@@ -433,21 +444,56 @@ document.querySelectorAll('.vibe-card').forEach(card => {
 /* ══════════════════════════════════════════════════════════
    SCREEN 2 — Duration Pills
 ══════════════════════════════════════════════════════════ */
+/* Helper to manage duration selection classes */
+function selectDurationPill(pill) {
+  document.querySelectorAll('.dur-pill').forEach(p => p.classList.remove('selected'));
+  pill.classList.add('selected');
+  
+  const screenDuration = document.getElementById('screen-duration');
+  if (screenDuration) {
+    const classesToRemove = Array.from(screenDuration.classList).filter(c => c.startsWith('dur-selected-'));
+    classesToRemove.forEach(c => screenDuration.classList.remove(c));
+    
+    let valSuffix = '';
+    if (pill.id === 'dur-custom') {
+      valSuffix = 'custom';
+    } else {
+      valSuffix = pill.dataset.minutes;
+    }
+    screenDuration.classList.add('dur-selected-' + valSuffix);
+  }
+}
+
 document.querySelectorAll('.dur-pill').forEach(pill => {
   pill.addEventListener('click', (e) => {
-    document.querySelectorAll('.dur-pill').forEach(p => p.classList.remove('selected'));
-    pill.classList.add('selected');
+    selectDurationPill(pill);
     
     if (pill.id === 'dur-custom') {
       const input = document.getElementById('custom-minutes');
-      state.minutes = parseInt(input.value, 10);
+      let val = parseInt(input.value, 10);
+      if (isNaN(val) || input.value.trim() === '') {
+        state.minutes = null;
+        updateDialCustom('');
+        if (btnStart) btnStart.disabled = true;
+      } else {
+        state.minutes = val;
+        updateDialCustom(val);
+        if (btnStart) btnStart.disabled = false;
+      }
       if (e.target !== input) input.focus();
-      // Update dial display for custom value
-      updateDialCustom(input.value);
     } else {
       state.minutes = parseInt(pill.dataset.minutes, 10);
+      if (btnStart) btnStart.disabled = false;
     }
-    btnStart.disabled = false;
+  });
+
+  pill.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      if (e.key === ' ') {
+        e.preventDefault();
+      }
+      pill.click();
+    }
   });
 });
 
@@ -461,19 +507,40 @@ function updateDialCustom(val) {
 
 const customInput = document.getElementById('custom-minutes');
 if (customInput) {
-  customInput.addEventListener('input', () => {
-    let val = parseInt(customInput.value, 10);
-    if(val > 120) { 
-      val = 120; 
-      customInput.value = 120; 
-      showToast("Even the deepest focus needs rest. 120 minutes is the limit. Breathe, reset, and return when ready.");
+  const handleCustomActive = (e) => {
+    const customPill = document.getElementById('dur-custom');
+    if (customPill) {
+      selectDurationPill(customPill);
     }
-    if(val < 1) { val = 1; customInput.value = 1; }
-    if(document.getElementById('dur-custom').classList.contains('selected')) {
+    
+    let val = parseInt(customInput.value, 10);
+    
+    // Only perform bounds adjustment on actual input event to allow user to type
+    if (e.type === 'input' && !isNaN(val)) {
+      if (val > 120) { 
+        val = 120; 
+        customInput.value = 120; 
+        showToast("Even the deepest focus needs rest. 120 minutes is the limit. Breathe, reset, and return when ready.");
+      }
+      if (val < 1) { 
+        val = 1; 
+        customInput.value = 1; 
+      }
+    }
+    
+    if (isNaN(val) || customInput.value.trim() === '') {
+      state.minutes = null;
+      updateDialCustom('');
+      if (btnStart) btnStart.disabled = true;
+    } else {
       state.minutes = val;
       updateDialCustom(val);
+      if (btnStart) btnStart.disabled = false;
     }
-  });
+  };
+
+  customInput.addEventListener('focus', handleCustomActive);
+  customInput.addEventListener('input', handleCustomActive);
 }
 
 btnBack.addEventListener('click', () => goTo('hero'));
@@ -568,6 +635,21 @@ function onSessionComplete() {
   }
 
   completeStat.textContent = state.minutes + (state.minutes === 1 ? ' minute' : ' minutes');
+  
+  // Add fallback state classes for complete screen and body
+  const completeScreen = document.getElementById('screen-complete');
+  if (completeScreen) {
+    const classesToRemove = Array.from(completeScreen.classList).filter(c => c.startsWith('vibe-selected-'));
+    classesToRemove.forEach(c => completeScreen.classList.remove(c));
+    completeScreen.classList.add('vibe-selected-' + state.vibe);
+  }
+  const bodyEl = document.body;
+  if (bodyEl) {
+    const bodyClassesToRemove = Array.from(bodyEl.classList).filter(c => c.startsWith('vibe-selected-'));
+    bodyClassesToRemove.forEach(c => bodyEl.classList.remove(c));
+    bodyEl.classList.add('vibe-selected-' + state.vibe);
+  }
+
   goTo('complete').then(() => {
     resizeConfettiCanvas();
     burstConfetti();
@@ -583,9 +665,24 @@ function stopSession() {
   exitFullscreen();
 }
 
+/* Helper to clean up vibe-selected classes */
+function clearVibeSelectedClasses() {
+  const completeScreen = document.getElementById('screen-complete');
+  if (completeScreen) {
+    const classesToRemove = Array.from(completeScreen.classList).filter(c => c.startsWith('vibe-selected-'));
+    classesToRemove.forEach(c => completeScreen.classList.remove(c));
+  }
+  const bodyEl = document.body;
+  if (bodyEl) {
+    const bodyClassesToRemove = Array.from(bodyEl.classList).filter(c => c.startsWith('vibe-selected-'));
+    bodyClassesToRemove.forEach(c => bodyEl.classList.remove(c));
+  }
+}
+
 /* ── Exit ── */
 btnExit.addEventListener('click', () => {
   stopSession();
+  clearVibeSelectedClasses();
   goTo('hero');
 });
 
@@ -593,6 +690,7 @@ btnExit.addEventListener('click', () => {
 btnRestart.addEventListener('click', () => {
   cancelAnimationFrame(state.confettiRaf);
   state.confettiRaf = null;
+  clearVibeSelectedClasses();
   goTo('hero');
 });
 
