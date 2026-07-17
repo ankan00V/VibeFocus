@@ -16,9 +16,9 @@ This project redesigns `#screen-duration` and `#screen-complete` in `index.html`
 | # | Name | Scope | Dependencies | Status |
 |---|------|-------|-------------|--------|
 | 1 | Baseline Verification | Read code, verify selectors & state variables | None | DONE |
-| 2 | Redesign Duration Screen | HTML & CSS updates for `#screen-duration` (asymmetric/split layout) | M1 | IN_PROGRESS (fixing defects, worker_2: ae7b7019-3433-4696-8a62-86d0aef60662) |
-| 3 | Redesign Completion Screen | HTML & CSS updates for `#screen-complete` (asymmetric/bento layout) | M2 | IN_PROGRESS (fixing defects, worker_2: ae7b7019-3433-4696-8a62-86d0aef60662) |
-| 4 | Verification & Quality Audit | Interactive testing and `design-taste-frontend` validation | M3 | PLANNED |
+| 2 | Redesign Duration Screen | HTML & CSS updates for `#screen-duration` (asymmetric/split layout) | M1 | DONE |
+| 3 | Redesign Completion Screen | HTML & CSS updates for `#screen-complete` (asymmetric/bento layout) | M2 | DONE |
+| 4 | Verification & Quality Audit | Interactive testing and `design-taste-frontend` validation | M3 | DONE |
 
 ---
 

@@ -53,3 +53,41 @@ Integrity mode: development
 ### Functional Completeness
 - [ ] The circular dial on the duration screen features a lit handle/gem that animates smoothly.
 - [ ] The completion screen dynamically displays one of four distinct scenes and ceremony animations based on the `variant` state, while preserving the structural right-column glass cards across all four.
+
+## Follow-up — 2026-07-17T14:03:08Z
+
+Redesign the duration selection and completion screens of the VibeFocus Pomodoro application to be visually stunning, industry-grade, and perfectly aligned with the app's premium, immersive aesthetic. Complete the implementation of per-variant ceremony animations and micro-interactions.
+
+Working directory: /Users/ankanghosh/Desktop/projects/timer timer
+Integrity mode: development
+
+## Requirements
+
+### R1. Immersive Aesthetic Integration
+The UI architecture of `#screen-duration` and `#screen-complete` (in `index.html` and `styles.css`) must feel like a seamless continuation of the landing page's depth and immersion. 
+
+### R2. Strict Adherence to High-Agency Design Taste
+The redesign must explicitly apply the principles from the `design-taste-frontend` skill:
+- **No Generics:** Ban 3-column symmetrical generic cards and centered basic layouts.
+- **Color Discipline:** No default neon purple glows. Use absolute neutral bases with singular, elegant high-contrast accents, or sophisticated "Liquid Glass" refraction techniques.
+- **Motion & States:** Implement perpetual micro-interactions (e.g., spring physics, subtle breathing/shimmering states) and ensure loading/active states feel tactile and physical.
+
+### R3. Per-Variant Character System
+Implement the distinct visual character for each timer mode on both screens:
+- **Candle**: Warm amber/copper accent. Dial rim looks like a brass candle-holder. Completion: burnt-down candle stub. Micro-interaction: thin smoke wisp drifting up and fading, ember pulses gently. On load: flame visibly extinguishes down to the ember.
+- **Tree**: Mossy gold-green accent. Dial rim looks like a tree-ring cross-section. Completion: bare tree, scattered leaves. Micro-interaction: one leaf occasionally detaches and drifts down, branches sway. On load: last few leaves fall.
+- **Water Bowl**: Cool teal/silver accent. Dial rim looks like a ceramic bowl edge. Completion: bowl filled to the brim. Micro-interaction: slow ripple crosses surface with light-caustic shimmer. On load: bowl fills to full.
+- **Painting**: Warm gold + violet accent. Dial rim looks like a picture-frame. Completion: fully revealed canvas. Micro-interaction: soft diagonal light sheen sweeps across canvas, frame responds to mouse hover with slight 3D tilt. On load: last unrevealed patch dissolves away.
+
+### R4. Completion Screen Structure
+Maintain the shared shell layout for the completion screen (hero object on left, stacked glass cards on right). Apply frosted glass treatment to all cards (`background: rgba(255,255,255,0.08)`, `backdrop-filter: blur(20px)`).
+
+## Acceptance Criteria
+
+### UI Architecture & Code Quality
+- [ ] The `styles.css` file contains the specific ceremony animations and micro-interactions for all four variants as defined in R3.
+- [ ] The styling implements advanced CSS properties (e.g., `backdrop-filter: blur()`, `box-shadow: inset...` for liquid glass) without relying on generic styling.
+- [ ] No generic AI purple glow (`#7c3aed` box-shadow auto-glows) is applied to cards or buttons on these two screens.
+
+### Independent Agent-as-Judge Evaluation
+- [ ] A secondary agent auditor (using the `design-taste-frontend` rubric) scores the final screens at least an 8/10 for "Design Variance" (asymmetric/creative layout) and confirms the absence of generic "slop" patterns.

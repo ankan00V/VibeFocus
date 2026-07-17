@@ -262,6 +262,23 @@ function startHeroFocusSession() {
   if (btnStart) btnStart.disabled = true;
   updateDialCustom('');
 
+  const bodyEl = document.body;
+  if (bodyEl) {
+    const classesToRemove = Array.from(bodyEl.classList).filter(c => c.startsWith('vibe-selected-'));
+    classesToRemove.forEach(c => bodyEl.classList.remove(c));
+    bodyEl.classList.add('vibe-selected-' + state.vibe);
+  }
+
+  // Update per-variant subtitle
+  const variantSubtitles = {
+    candle: 'SET HOW LONG THE FLAME WILL BURN.',
+    tree: 'SET HOW LONG THE ROOTS WILL GROW.',
+    ice: 'SET HOW LONG THE STILLNESS WILL LAST.',
+    gallery: 'SET HOW LONG THE CANVAS WILL REVEAL.'
+  };
+  const durSubtitle = document.getElementById('dur-variant-subtitle');
+  if (durSubtitle) durSubtitle.textContent = variantSubtitles[state.vibe] || 'SELECT A DURATION TO ALLOCATE YOUR ATTENTION.';
+
   // Go straight to duration screen
   goTo('duration', true);
 }
@@ -693,6 +710,21 @@ btnRestart.addEventListener('click', () => {
   clearVibeSelectedClasses();
   goTo('hero');
 });
+
+/* ── Painting 3D Tilt on Mouse Hover ── */
+(function initPaintingTilt() {
+  const canvasArt = document.querySelector('.painting-visual .canvas-art');
+  if (!canvasArt) return;
+  canvasArt.addEventListener('mousemove', (e) => {
+    const rect = canvasArt.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    canvasArt.style.transform = `perspective(600px) rotateY(${x * 8}deg) rotateX(${-y * 8}deg)`;
+  });
+  canvasArt.addEventListener('mouseleave', () => {
+    canvasArt.style.transform = 'perspective(600px) rotateY(0deg) rotateX(0deg)';
+  });
+})();
 
 /* ══════════════════════════════════════════════════════════
    Canvas resize
