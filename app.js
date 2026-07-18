@@ -172,6 +172,13 @@ heroSlots.forEach((slot, idx) => {
   const a = slot.querySelector('.layer-a');
   const b = slot.querySelector('.layer-b');
 
+  const isMobile = window.innerWidth <= 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (isMobile) {
+    // Native loop fallback for mobile only to prevent freezing if network is slow
+    a.loop = true;
+    b.loop = true;
+  }
+
   const s = {
     slot,
     layers: [a, b],
@@ -188,6 +195,17 @@ heroSlots.forEach((slot, idx) => {
       if (s.activeIdx !== layerIdx) return; // only the active layer triggers
 
       const remaining = vid.duration - vid.currentTime;
+      
+      if (isMobile) {
+        // Preload standby video on mobile to prevent play() delays causing blank screens
+        if (remaining <= 5.0 && remaining > CROSSFADE_LEAD) {
+          const standbyVid = s.layers[s.activeIdx === 0 ? 1 : 0];
+          if (standbyVid.readyState < 3) {
+            standbyVid.load();
+          }
+        }
+      }
+
       if (remaining <= CROSSFADE_LEAD && remaining > 0) {
         beginCrossfade(s);
       }
@@ -212,31 +230,52 @@ function beginCrossfade(s) {
   const oldVid = s.layers[oldIdx];
   const newVid = s.layers[newIdx];
 
+  const doFade = () => {
+    // Crossfade: bring new layer in, fade old layer out
+    newVid.style.transition = `opacity ${CROSSFADE_MS}ms ease-in-out`;
+    oldVid.style.transition = `opacity ${CROSSFADE_MS}ms ease-in-out`;
+
+    // Use rAF to ensure the transition applies after the styles are set
+    requestAnimationFrame(() => {
+      newVid.style.opacity = '1';
+      newVid.style.zIndex  = '2';
+      oldVid.style.opacity = '0';
+      oldVid.style.zIndex  = '1';
+    });
+
+    // After crossfade completes, clean up
+    setTimeout(() => {
+      oldVid.pause();
+      oldVid.currentTime = 0;
+      oldVid.style.transition = '';
+      newVid.style.transition = '';
+      s.activeIdx = newIdx;
+      s.crossfading = false;
+    }, CROSSFADE_MS + 100);
+  };
+
   // Prepare standby layer at frame 0
   newVid.currentTime = 0;
-  newVid.play().catch(() => {});
 
-  // Crossfade: bring new layer in, fade old layer out
-  newVid.style.transition = `opacity ${CROSSFADE_MS}ms ease-in-out`;
-  oldVid.style.transition = `opacity ${CROSSFADE_MS}ms ease-in-out`;
-
-  // Use rAF to ensure the transition applies after the styles are set
-  requestAnimationFrame(() => {
-    newVid.style.opacity = '1';
-    newVid.style.zIndex  = '2';
-    oldVid.style.opacity = '0';
-    oldVid.style.zIndex  = '1';
-  });
-
-  // After crossfade completes, clean up
-  setTimeout(() => {
-    oldVid.pause();
-    oldVid.currentTime = 0;
-    oldVid.style.transition = '';
-    newVid.style.transition = '';
-    s.activeIdx = newIdx;
-    s.crossfading = false;
-  }, CROSSFADE_MS + 100);
+  const isMobile = window.innerWidth <= 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (!isMobile) {
+    // Desktop: Original pristine behavior. Assume instant play.
+    newVid.play().catch(() => {});
+    doFade();
+  } else {
+    // Mobile: Wait for 'playing' to guarantee no blank screens
+    if (newVid.readyState >= 3) {
+      newVid.play().catch(() => {});
+      doFade();
+    } else {
+      const onPlaying = () => {
+        newVid.removeEventListener('playing', onPlaying);
+        doFade();
+      };
+      newVid.addEventListener('playing', onPlaying);
+      newVid.play().catch(() => {});
+    }
+  }
 }
 
 // Start the first slot's video playing
