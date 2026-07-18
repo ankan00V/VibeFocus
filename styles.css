@@ -3151,6 +3151,42 @@ body:has(#screen-hero.active):not(:has(#how-it-works-modal.active)) .global-link
 /* ══════════════════════════════════════════════════════════
    SEO & AEO Below-The-Fold Section
 ══════════════════════════════════════════════════════════ */
+@keyframes smoothFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-10px) scale(1.02); }
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.seo-page-body {
+  background: radial-gradient(circle at 50% 0%, #1a1525 0%, #0d0d0d 60%);
+  background-attachment: fixed;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  overflow-y: auto !important;
+  position: relative;
+}
+
+.seo-page-body::before {
+  content: '';
+  position: absolute;
+  top: -20%; left: -10%; width: 120%; height: 120%;
+  background: radial-gradient(circle at 80% 20%, rgba(99, 102, 241, 0.15) 0%, transparent 40%),
+              radial-gradient(circle at 20% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 40%);
+  z-index: 0;
+  pointer-events: none;
+  animation: smoothFloat 15s ease-in-out infinite alternate;
+}
+
 .seo-section {
   width: 100%;
   padding: 6rem 1.5rem;
@@ -3164,13 +3200,18 @@ body:has(#screen-hero.active):not(:has(#how-it-works-modal.active)) .global-link
 }
 
 .seo-container {
+  position: relative;
+  z-index: 10;
   max-width: 900px;
   width: 100%;
-  padding: 4rem;
-  border-radius: var(--r-xl);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: var(--shadow-tactile);
+  padding: 5rem 4rem;
+  border-radius: 32px;
+  background: rgba(30, 25, 35, 0.4);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  animation: slideUpFade 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .seo-header {
