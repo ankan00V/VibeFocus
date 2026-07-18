@@ -3,63 +3,97 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FAQ | VibeFocus</title>
-  <meta name="description" content="Frequently asked questions about VibeFocus, the best aesthetic Pomodoro timer online." />
+  <title>FAQ | VibeFocus — Frequently Asked Questions</title>
+  <meta name="description" content="Everything you need to know about VibeFocus: how to use it, whether it's free, if it helps with ADHD, and more." />
   <link rel="icon" href="assets/favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="seo-premium-body">
-  
-  <nav class="seo-premium-nav animate-fade-in-up">
+<body class="page-body page-faq">
+
+  <nav class="page-nav">
     <a href="index.html">
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
       Back to Timer
     </a>
   </nav>
 
-  <div class="seo-premium-container">
-    <h1 class="seo-premium-title animate-fade-in-up delay-100">Questions & Answers</h1>
-    <p class="seo-premium-intro animate-fade-in-up delay-200">
-      Everything you need to know about VibeFocus, how it works, and how to get the most out of your deep work sessions.
-    </p>
+  <main class="page-wrap">
 
-    <div class="seo-bento-grid animate-fade-in-up delay-300">
-      <div class="seo-bento-card">
-        <div class="seo-bento-icon-wrapper">❓</div>
-        <div class="seo-bento-content">
-          <h3>What makes this different?</h3>
-          <p>VibeFocus replaces the traditional ticking clock with calming, cinematic visuals like a burning candle or filling water bowl, designed to anchor your attention for deep work without causing anxiety.</p>
-        </div>
-      </div>
-      
-      <div class="seo-bento-card">
-        <div class="seo-bento-icon-wrapper">🧠</div>
-        <div class="seo-bento-content">
-          <h3>Is it ADHD-friendly?</h3>
-          <p>Yes, VibeFocus is an excellent ADHD-friendly focus app. The continuous, subtle visual motion gives the brain just enough gentle stimulation to prevent distraction.</p>
-        </div>
-      </div>
-      
-      <div class="seo-bento-card">
-        <div class="seo-bento-icon-wrapper">⏱️</div>
-        <div class="seo-bento-content">
-          <h3>How do I use it?</h3>
-          <p>Simply select a calm atmosphere, choose your custom time blocking duration, and enter the flow state. The mindfulness timer will visually represent time passing seamlessly on your screen.</p>
+    <!-- Hero -->
+    <section class="faq-hero reveal">
+      <h1>Got <span>questions?</span></h1>
+      <p class="subtitle">We've got answers. If something isn't covered here, reach out — we'd love to hear from you.</p>
+    </section>
+
+    <!-- FAQ Accordion -->
+    <div class="faq-list reveal reveal-d2">
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('active')">
+          What makes VibeFocus different from other Pomodoro timers?
+          <span class="faq-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          </span>
+        </button>
+        <div class="faq-answer">
+          <p>Most timers are clinical — a ticking clock or a loud alarm that creates anxiety. VibeFocus replaces that with calming, cinematic visuals like a burning candle or filling water bowl, designed to anchor your attention for deep work without adding stress.</p>
         </div>
       </div>
 
-      <div class="seo-bento-card">
-        <div class="seo-bento-icon-wrapper">💻</div>
-        <div class="seo-bento-content">
-          <h3>Do I need an account?</h3>
-          <p>No. VibeFocus is completely free to use online in your browser with zero sign-ups required. We believe deep work should be accessible immediately.</p>
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('active')">
+          Is VibeFocus good for people with ADHD?
+          <span class="faq-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          </span>
+        </button>
+        <div class="faq-answer">
+          <p>Yes. The continuous, subtle visual motion gives the brain just enough gentle stimulation to prevent distraction. Complete silence is often the enemy of an active mind — VibeFocus fills that gap without overwhelming it.</p>
         </div>
       </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('active')">
+          How do I use the visual time blocking tool?
+          <span class="faq-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          </span>
+        </button>
+        <div class="faq-answer">
+          <p>Select a calm atmosphere, choose your custom time blocking duration (from 5 minutes to 90 minutes), and hit Start Focus. The cinematic timer will visually represent time passing seamlessly on your screen.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('active')">
+          Do I need to create an account or pay anything?
+          <span class="faq-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          </span>
+        </button>
+        <div class="faq-answer">
+          <p>No. VibeFocus is completely free to use, directly in your browser. No sign-ups, no subscriptions, no premium tiers. We believe deep work should be immediately accessible to everyone.</p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" onclick="this.parentElement.classList.toggle('active')">
+          Can I keep the timer visible while working in other tabs?
+          <span class="faq-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          </span>
+        </button>
+        <div class="faq-answer">
+          <p>Absolutely. Use the Picture-in-Picture button to pop the cinematic timer into a floating always-on-top widget. It stays visible on every screen and tab while you work.</p>
+        </div>
+      </div>
+
     </div>
-  </div>
+
+  </main>
 
 </body>
 </html>
