@@ -2895,6 +2895,9 @@ body.vibe-selected-gallery #screen-complete::after {
   .hero-content-layer { padding: 1.5rem 1rem; }
   .hero-center { transform: translateY(0); padding-top: 1rem; }
   .hero-badge { margin-bottom: 1rem; }
+  .hero-overlay-png {
+    object-fit: fill;
+  }
 }
 /* How It Works Modal */
 .hiw-modal-overlay {
