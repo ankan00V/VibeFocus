@@ -22,70 +22,62 @@ function initWaterBowl3D() {
     bowlCamera.position.set(0, 4, 7);
     bowlCamera.lookAt(0, 0, 0);
     
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     bowlScene.add(ambientLight);
     
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
     dirLight.position.set(5, 8, 5);
     bowlScene.add(dirLight);
     
-    const rimLight = new THREE.SpotLight(0x00f0ff, 3);
+    const rimLight = new THREE.SpotLight(0x00f0ff, 4);
     rimLight.position.set(-5, 5, -5);
     rimLight.lookAt(0, 0, 0);
-    rimLight.angle = Math.PI / 4;
-    rimLight.penumbra = 0.5;
     bowlScene.add(rimLight);
     
-    const rimLight2 = new THREE.SpotLight(0x0055ff, 2);
-    rimLight2.position.set(5, -2, 5);
-    rimLight2.lookAt(0, 0, 0);
-    bowlScene.add(rimLight2);
-    
-    const bowlGeo = new THREE.SphereGeometry(2.5, 64, 32, 0, Math.PI * 2, 0, Math.PI / 1.8);
+    // Glass Bowl
+    // Hemisphere facing up
+    const bowlGeo = new THREE.SphereGeometry(2.5, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
     const glassMat = new THREE.MeshPhysicalMaterial({
         color: 0xffffff,
-        metalness: 0.1,
-        roughness: 0.05,
-        transmission: 0.98,
-        thickness: 0.5,
+        metalness: 0.3,
+        roughness: 0.1,
         transparent: true,
+        opacity: 0.15,
         side: THREE.DoubleSide,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.1
+        depthWrite: false
     });
     glassBowl = new THREE.Mesh(bowlGeo, glassMat);
-    glassBowl.rotation.x = Math.PI; 
+    glassBowl.rotation.x = Math.PI; // Face open side UP
     bowlScene.add(glassBowl);
     
-    const waterGeo = new THREE.CylinderGeometry(2.4, 0.1, 1.5, 128, 32);
+    // Water Surface (A dense plane, scaled to fit the bowl)
+    const waterGeo = new THREE.PlaneGeometry(2, 2, 128, 128);
+    waterGeo.rotateX(-Math.PI / 2); // Lay flat
     
     waterUniforms = {
         uTime: { value: 0 },
-        uProgress: { value: 0 },
         uInteraction: { value: 0 }
     };
     
-    const isMobile = window.innerWidth <= 768;
-    
     const waterMat = new THREE.MeshPhysicalMaterial({
         color: 0x00aaff,
-        emissive: 0x002255,
+        emissive: 0x001133,
         roughness: 0.1,
-        metalness: 0.2,
-        transmission: isMobile ? 0.0 : 0.8,
+        metalness: 0.3,
         transparent: true,
         opacity: 0.9,
-        clearcoat: 1.0
+        side: THREE.DoubleSide
     });
     
     waterMat.onBeforeCompile = (shader) => {
         shader.uniforms.uTime = waterUniforms.uTime;
-        shader.uniforms.uProgress = waterUniforms.uProgress;
         shader.uniforms.uInteraction = waterUniforms.uInteraction;
         
+        // Pass UV to fragment shader for discarding corners
         shader.vertexShader = `
+            varying vec2 vUvSurface;
             uniform float uTime;
-            uniform float uProgress;
             uniform float uInteraction;
             
             vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -119,31 +111,50 @@ function initWaterBowl3D() {
             `#include <begin_vertex>`,
             `
             #include <begin_vertex>
+            vUvSurface = uv;
             
-            if (position.y > 0.1) {
-                float dist = length(position.xz);
-                float noise = snoise(position.xz * 1.5 - uTime * 0.5) * 0.05;
-                float wave = 0.0;
-                if (uInteraction > 0.0 && uInteraction < 1.0) {
-                    float wavePhase = (dist * 2.0) - (uInteraction * 15.0);
-                    wave = sin(wavePhase) * exp(-abs(wavePhase) * 0.5) * 0.2 * (1.0 - uInteraction);
-                }
-                transformed.y += noise + wave;
+            // Local pos is x,z. length(pos) <= 1 since Plane is 2x2.
+            float dist = length(position.xz);
+            
+            // Ripples
+            float noise = snoise(position.xz * 3.0 - uTime * 0.5) * 0.04;
+            float wave = 0.0;
+            if (uInteraction > 0.0 && uInteraction < 1.0) {
+                float wavePhase = (dist * 10.0) - (uInteraction * 15.0);
+                wave = sin(wavePhase) * exp(-abs(wavePhase) * 0.5) * 0.15 * (1.0 - uInteraction);
+            }
+            
+            transformed.y += noise + wave;
+            `
+        );
+        
+        shader.fragmentShader = `
+            varying vec2 vUvSurface;
+        ` + shader.fragmentShader;
+        
+        shader.fragmentShader = shader.fragmentShader.replace(
+            `#include <alphatest_fragment>`,
+            `
+            #include <alphatest_fragment>
+            // Make it a perfect circle
+            if (length(vUvSurface - vec2(0.5)) > 0.5) {
+                discard;
             }
             `
         );
     };
     
     waterMesh = new THREE.Mesh(waterGeo, waterMat);
-    waterMesh.position.y = -0.5;
+    // Initially hide if empty
+    waterMesh.visible = false;
     bowlScene.add(waterMesh);
     
-    const dropGeo = new THREE.SphereGeometry(0.08, 16, 16);
+    // Droplet
+    const dropGeo = new THREE.SphereGeometry(0.06, 16, 16);
     const dropMat = new THREE.MeshPhysicalMaterial({
         color: 0x88ccff,
         metalness: 0.1,
         roughness: 0.05,
-        transmission: 0.9,
         transparent: true,
         opacity: 0.8
     });
@@ -173,26 +184,23 @@ function renderWaterBowl3D(progress, time, isCeremonyActive) {
         initWaterBowl3D();
     }
     
-    // Invert progress: 1.0 means start (empty), 0.0 means end (full)
-    let fillFrac = 1.0 - progress;
+    // progress goes 0.0 (start) to 1.0 (end) in app.js
+    let fillFrac = progress; 
     if (isCeremonyActive) {
         fillFrac = 1.0; // fully filled on completion screen
     }
     
     if (waterUniforms) {
         waterUniforms.uTime.value = time;
-        waterUniforms.uProgress.value = fillFrac;
         
         if (isCeremonyActive && waterInteractionState === 0) {
-            // Trigger ceremony ripple once
             waterInteractionState = 0.01;
         }
         
         if (waterInteractionState > 0) {
-            waterInteractionState += 0.02; // speed of ripple
+            waterInteractionState += 0.02;
             if (waterInteractionState >= 1.0) waterInteractionState = 0;
         }
-        
         waterUniforms.uInteraction.value = waterInteractionState;
     }
     
@@ -200,17 +208,30 @@ function renderWaterBowl3D(progress, time, isCeremonyActive) {
         glassBowl.rotation.y = time * 0.05;
     }
     
-    const waterSurfaceY = -1.5 + (fillFrac * 1.3);
+    // Bowl geometry spans from y=0 (rim) down to y=-2.5 (bottom)
+    const minWaterY = -2.48; // slightly above bottom to prevent z-fighting
+    const maxWaterY = -0.2;  // slightly below rim
+    const waterSurfaceY = minWaterY + (fillFrac * (maxWaterY - minWaterY));
     
     if (waterMesh) {
-        waterMesh.rotation.y = time * 0.05;
-        waterMesh.position.y = waterSurfaceY;
+        if (fillFrac < 0.001) {
+            waterMesh.visible = false;
+        } else {
+            waterMesh.visible = true;
+            waterMesh.rotation.y = time * 0.05;
+            waterMesh.position.y = waterSurfaceY;
+            
+            // Calculate radius to perfectly fit the bowl curve at this height
+            // Bowl radius R = 2.5
+            // Sphere eq: x^2 + y^2 = R^2 -> x = sqrt(R^2 - y^2)
+            const R = 2.48; // Inner radius
+            let radius = Math.sqrt(Math.max(0, R*R - waterSurfaceY*waterSurfaceY));
+            waterMesh.scale.set(radius, 1.0, radius);
+        }
     }
     
-    // Water Droplet Logic
     if (dropMesh) {
-        if (!isCeremonyActive && progress > 0) {
-            // Drop falls every 1.5 seconds
+        if (!isCeremonyActive && fillFrac < 0.99) {
             if (time - lastDropTime > 1.5) {
                 lastDropTime = time;
                 dropState = 0.0;
@@ -218,22 +239,19 @@ function renderWaterBowl3D(progress, time, isCeremonyActive) {
             }
             
             if (dropState < 1.0) {
-                dropState += 0.04; // fall speed
+                dropState += 0.04;
                 const startY = 2.0;
                 const endY = waterSurfaceY;
                 
                 if (dropState >= 1.0) {
                     dropMesh.visible = false;
-                    // Trigger ripple when it hits the water
-                    waterInteractionState = 0.01;
+                    waterInteractionState = 0.01; // Ripple
                 } else {
-                    // Easing for gravity (acceleration)
                     const easeInQuad = dropState * dropState;
                     dropMesh.position.y = startY - (startY - endY) * easeInQuad;
                     dropMesh.position.x = 0;
                     dropMesh.position.z = 0;
                     
-                    // Motion blur / stretch effect
                     dropMesh.scale.y = 1.0 + (dropState * 1.5);
                     dropMesh.scale.x = 1.0 - (dropState * 0.2);
                     dropMesh.scale.z = 1.0 - (dropState * 0.2);
