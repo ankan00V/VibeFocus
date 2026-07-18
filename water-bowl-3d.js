@@ -260,6 +260,9 @@ function renderWaterBowl3D(progress, time, isCeremonyActive, totalSeconds = 60) 
                 if (dropState >= 1.0) {
                     dropMesh.visible = false;
                     waterInteractionState = 0.01; // Ripple
+                    if (typeof playDropSound === 'function') {
+                        playDropSound();
+                    }
                 } else {
                     const easeInQuad = dropState * dropState;
                     dropMesh.position.y = startY - (startY - endY) * easeInQuad;
