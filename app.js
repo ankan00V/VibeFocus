@@ -320,7 +320,7 @@ function startHeroFocusSession() {
   state.vibe = HERO_VIBES[activeVidId].vibe;
   
   // The aesthetic names for the duration screen
-  const aestheticNames = ['Golden Hour', 'Still Water', 'Deep Woods', 'Quiet Dawn'];
+  const aestheticNames = ['Amber Flame', 'Tranquil Ripples', 'Whispering Grove', 'Dawn Canvas'];
   
   // Update the UI if the user ever goes to the vibe screen
   document.querySelectorAll('.vibe-card').forEach(c => c.classList.remove('selected'));
