@@ -328,9 +328,14 @@ function startHeroFocusSession() {
 btnHowItWorks.forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.preventDefault();
-    const seoContent = document.getElementById('seo-content');
-    if (seoContent) {
-      seoContent.scrollIntoView({ behavior: 'smooth' });
+    if (hiwModal) {
+      hiwModal.classList.add('active');
+      hiwModal.setAttribute('aria-hidden', 'false');
+      // Set display flex to show it
+      hiwModal.style.display = 'flex';
+      // Force reflow for transition
+      void hiwModal.offsetWidth;
+      hiwModal.style.opacity = '1';
     }
     // Also close mobile menu if it's open
     if (heroMobileMenu && heroMobileMenu.classList.contains('active')) {
