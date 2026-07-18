@@ -331,11 +331,6 @@ btnHowItWorks.forEach(btn => {
     if (hiwModal) {
       hiwModal.classList.add('active');
       hiwModal.setAttribute('aria-hidden', 'false');
-      // Set display flex to show it
-      hiwModal.style.display = 'flex';
-      // Force reflow for transition
-      void hiwModal.offsetWidth;
-      hiwModal.style.opacity = '1';
     }
     // Also close mobile menu if it's open
     if (heroMobileMenu && heroMobileMenu.classList.contains('active')) {
