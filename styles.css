@@ -3182,6 +3182,124 @@ body:has(#screen-hero.active):not(:has(#how-it-works-modal.active)) .global-link
 }
 
 /* ══════════════════════════════════════════════════════════
+   SEO & AEO Below-The-Fold Section
+══════════════════════════════════════════════════════════ */
+.seo-section {
+  width: 100%;
+  padding: 6rem 1.5rem;
+  background: var(--bg-deep);
+  position: relative;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.seo-container {
+  max-width: 900px;
+  width: 100%;
+  padding: 4rem;
+  border-radius: var(--r-xl);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-tactile);
+}
+
+.seo-header {
+  text-align: center;
+  margin-bottom: 4rem;
+}
+
+.seo-header h2 {
+  font-family: var(--font);
+  font-size: 3.5rem;
+  font-style: italic;
+  font-weight: 400;
+  margin-bottom: 1rem;
+  background: linear-gradient(to right, #fff, var(--violet-light));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.seo-lead {
+  font-family: var(--font-sans);
+  font-size: 1.1rem;
+  color: var(--text-dim);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.seo-article h3, .seo-faq h3 {
+  font-family: var(--font);
+  font-size: 2.2rem;
+  font-style: italic;
+  color: #fff;
+  margin-bottom: 1.5rem;
+  margin-top: 3rem;
+}
+
+.seo-article p, .seo-features-list div, .faq-item p {
+  font-family: var(--font-sans);
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text-dim);
+  margin-bottom: 1.5rem;
+}
+
+.seo-article strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.seo-features-list {
+  list-style: none;
+  padding: 0;
+  margin: 2rem 0;
+}
+
+.seo-features-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: var(--r-lg);
+  transition: background 0.3s ease;
+}
+
+.seo-features-list li:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.seo-emoji {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.faq-item {
+  margin-bottom: 2rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.faq-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.faq-item h4 {
+  font-family: var(--font-sans);
+  font-size: 1.2rem;
+  color: #fff;
+  margin-bottom: 0.8rem;
+  font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════
    Mobile Optimizations (Global 768px overrides)
 ══════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
