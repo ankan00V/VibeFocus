@@ -965,31 +965,65 @@ function drawVibe(ctx, W, H, progress, vibe, time, totalSeconds = 60) {
   ctx.clearRect(0, 0, W, H);
   
   const waterBowlCanvas = document.getElementById('water-bowl-canvas');
+  const treeCanvas = document.getElementById('tree-canvas');
   const isMainCanvas = ctx.canvas.id === 'focus-canvas' || ctx.canvas.id === 'complete-canvas';
   
-  if (waterBowlCanvas && isMainCanvas) {
-      if (vibe === 'ice') {
-          ctx.canvas.style.opacity = '0';
-          waterBowlCanvas.style.display = 'block';
-          
-          if (waterBowlCanvas.parentElement !== ctx.canvas.parentElement) {
-              ctx.canvas.parentElement.insertBefore(waterBowlCanvas, ctx.canvas);
-              waterBowlCanvas.style.position = 'absolute';
-              waterBowlCanvas.style.top = '0';
-              waterBowlCanvas.style.left = '0';
-              waterBowlCanvas.style.width = '100%';
-              waterBowlCanvas.style.height = '100%';
-              waterBowlCanvas.style.zIndex = '-1';
+  if (isMainCanvas) {
+      if (waterBowlCanvas) {
+          if (vibe === 'ice') {
+              ctx.canvas.style.opacity = '0';
+              waterBowlCanvas.style.display = 'block';
+              
+              if (waterBowlCanvas.parentElement !== ctx.canvas.parentElement) {
+                  ctx.canvas.parentElement.insertBefore(waterBowlCanvas, ctx.canvas);
+                  waterBowlCanvas.style.position = 'absolute';
+                  waterBowlCanvas.style.top = '0';
+                  waterBowlCanvas.style.left = '0';
+                  waterBowlCanvas.style.width = '100%';
+                  waterBowlCanvas.style.height = '100%';
+                  waterBowlCanvas.style.zIndex = '-1';
+              }
+              
+              if (typeof renderWaterBowl3D !== 'undefined') {
+                  const isCeremony = ctx.canvas.id === 'complete-canvas'; 
+                  renderWaterBowl3D(progress, time, isCeremony, totalSeconds);
+              }
+          } else {
+              waterBowlCanvas.style.display = 'none';
           }
-          
-          if (typeof renderWaterBowl3D !== 'undefined') {
-              const isCeremony = ctx.canvas.id === 'complete-canvas'; 
-              renderWaterBowl3D(progress, time, isCeremony, totalSeconds);
+      }
+
+      if (treeCanvas) {
+          if (vibe === 'tree') {
+              ctx.canvas.style.opacity = '0';
+              treeCanvas.style.display = 'block';
+              
+              if (treeCanvas.parentElement !== ctx.canvas.parentElement) {
+                  ctx.canvas.parentElement.insertBefore(treeCanvas, ctx.canvas);
+                  treeCanvas.style.position = 'absolute';
+                  treeCanvas.style.top = '0';
+                  treeCanvas.style.left = '0';
+                  treeCanvas.style.width = '100%';
+                  treeCanvas.style.height = '100%';
+                  treeCanvas.style.zIndex = '-1';
+              }
+              
+              if (typeof renderTree3D !== 'undefined') {
+                  renderTree3D(progress, totalSeconds);
+              }
+          } else {
+              treeCanvas.style.display = 'none';
           }
-          return; // Skip 2D rendering for the main canvas when 3D is active
-      } else {
+      }
+
+      // Restore 2D canvas opacity if no 3D canvas is active
+      if (vibe !== 'ice' && vibe !== 'tree') {
           ctx.canvas.style.opacity = '1';
-          waterBowlCanvas.style.display = 'none';
+      }
+
+      // Skip 2D rendering for the main canvas when 3D is active
+      if (vibe === 'ice' || vibe === 'tree') {
+          return;
       }
   }
 
