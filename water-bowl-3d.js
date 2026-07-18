@@ -1,5 +1,5 @@
 let bowlScene, bowlCamera, bowlRenderer;
-let waterMesh, glassBowl;
+let waterMesh, glassBowl, dropMesh;
 let waterUniforms;
 let isBowlInitialized = false;
 
@@ -138,6 +138,19 @@ function initWaterBowl3D() {
     waterMesh.position.y = -0.5;
     bowlScene.add(waterMesh);
     
+    const dropGeo = new THREE.SphereGeometry(0.08, 16, 16);
+    const dropMat = new THREE.MeshPhysicalMaterial({
+        color: 0x88ccff,
+        metalness: 0.1,
+        roughness: 0.05,
+        transmission: 0.9,
+        transparent: true,
+        opacity: 0.8
+    });
+    dropMesh = new THREE.Mesh(dropGeo, dropMat);
+    dropMesh.visible = false;
+    bowlScene.add(dropMesh);
+    
     isBowlInitialized = true;
     
     window.addEventListener('resize', () => {
@@ -151,6 +164,8 @@ function initWaterBowl3D() {
 }
 
 let waterInteractionState = 0;
+let lastDropTime = 0;
+let dropState = 1.0;
 
 function renderWaterBowl3D(progress, time, isCeremonyActive) {
     if (!isBowlInitialized) {
@@ -158,25 +173,75 @@ function renderWaterBowl3D(progress, time, isCeremonyActive) {
         initWaterBowl3D();
     }
     
+    // Invert progress: 1.0 means start (empty), 0.0 means end (full)
+    let fillFrac = 1.0 - progress;
+    if (isCeremonyActive) {
+        fillFrac = 1.0; // fully filled on completion screen
+    }
+    
     if (waterUniforms) {
         waterUniforms.uTime.value = time;
-        waterUniforms.uProgress.value = progress;
+        waterUniforms.uProgress.value = fillFrac;
         
-        if (isCeremonyActive) {
-            waterInteractionState += 0.01;
-            if (waterInteractionState > 1) waterInteractionState = 1;
-        } else {
-            waterInteractionState = 0;
+        if (isCeremonyActive && waterInteractionState === 0) {
+            // Trigger ceremony ripple once
+            waterInteractionState = 0.01;
         }
+        
+        if (waterInteractionState > 0) {
+            waterInteractionState += 0.02; // speed of ripple
+            if (waterInteractionState >= 1.0) waterInteractionState = 0;
+        }
+        
         waterUniforms.uInteraction.value = waterInteractionState;
     }
     
     if (glassBowl) {
         glassBowl.rotation.y = time * 0.05;
     }
+    
+    const waterSurfaceY = -1.5 + (fillFrac * 1.3);
+    
     if (waterMesh) {
         waterMesh.rotation.y = time * 0.05;
-        waterMesh.position.y = -1.5 + (progress * 1.3);
+        waterMesh.position.y = waterSurfaceY;
+    }
+    
+    // Water Droplet Logic
+    if (dropMesh) {
+        if (!isCeremonyActive && progress > 0) {
+            // Drop falls every 1.5 seconds
+            if (time - lastDropTime > 1.5) {
+                lastDropTime = time;
+                dropState = 0.0;
+                dropMesh.visible = true;
+            }
+            
+            if (dropState < 1.0) {
+                dropState += 0.04; // fall speed
+                const startY = 2.0;
+                const endY = waterSurfaceY;
+                
+                if (dropState >= 1.0) {
+                    dropMesh.visible = false;
+                    // Trigger ripple when it hits the water
+                    waterInteractionState = 0.01;
+                } else {
+                    // Easing for gravity (acceleration)
+                    const easeInQuad = dropState * dropState;
+                    dropMesh.position.y = startY - (startY - endY) * easeInQuad;
+                    dropMesh.position.x = 0;
+                    dropMesh.position.z = 0;
+                    
+                    // Motion blur / stretch effect
+                    dropMesh.scale.y = 1.0 + (dropState * 1.5);
+                    dropMesh.scale.x = 1.0 - (dropState * 0.2);
+                    dropMesh.scale.z = 1.0 - (dropState * 0.2);
+                }
+            }
+        } else {
+            dropMesh.visible = false;
+        }
     }
     
     bowlRenderer.render(bowlScene, bowlCamera);
