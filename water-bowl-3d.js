@@ -23,14 +23,14 @@ function initWaterBowl3D() {
     bowlCamera.lookAt(0, 0, 0);
     
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
     bowlScene.add(ambientLight);
     
-    const dirLight = new THREE.DirectionalLight(0xffffff, 2.0);
-    dirLight.position.set(5, 8, 5);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    dirLight.position.set(2, 8, 4);
     bowlScene.add(dirLight);
     
-    const rimLight = new THREE.SpotLight(0x00f0ff, 4);
+    const rimLight = new THREE.SpotLight(0x00aaff, 5);
     rimLight.position.set(-5, 5, -5);
     rimLight.lookAt(0, 0, 0);
     bowlScene.add(rimLight);
@@ -40,10 +40,12 @@ function initWaterBowl3D() {
     const bowlGeo = new THREE.SphereGeometry(2.5, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
     const glassMat = new THREE.MeshPhysicalMaterial({
         color: 0xffffff,
-        metalness: 0.3,
-        roughness: 0.1,
+        metalness: 0.1,
+        roughness: 0.05,
+        transmission: 0.9,
+        ior: 1.5,
         transparent: true,
-        opacity: 0.15,
+        opacity: 1.0,
         side: THREE.DoubleSide,
         depthWrite: false
     });
@@ -61,12 +63,14 @@ function initWaterBowl3D() {
     };
     
     const waterMat = new THREE.MeshPhysicalMaterial({
-        color: 0x00aaff,
-        emissive: 0x001133,
-        roughness: 0.1,
-        metalness: 0.3,
+        color: 0x004466, // Deep realistic blue
+        emissive: 0x000000, // No neon
+        roughness: 0.02,
+        metalness: 0.1,
+        transmission: 0.8,
+        ior: 1.33,
         transparent: true,
-        opacity: 0.9,
+        opacity: 1.0,
         side: THREE.DoubleSide
     });
     
@@ -117,11 +121,11 @@ function initWaterBowl3D() {
             float dist = length(position.xz);
             
             // Ripples
-            float noise = snoise(position.xz * 3.0 - uTime * 0.5) * 0.04;
+            float noise = snoise(position.xz * 4.0 - uTime * 0.8) * 0.02;
             float wave = 0.0;
             if (uInteraction > 0.0 && uInteraction < 1.0) {
-                float wavePhase = (dist * 10.0) - (uInteraction * 15.0);
-                wave = sin(wavePhase) * exp(-abs(wavePhase) * 0.5) * 0.15 * (1.0 - uInteraction);
+                float wavePhase = (dist * 12.0) - (uInteraction * 20.0);
+                wave = sin(wavePhase) * exp(-abs(wavePhase) * 0.6) * 0.12 * (1.0 - uInteraction);
             }
             
             transformed.y += noise + wave;
@@ -152,11 +156,13 @@ function initWaterBowl3D() {
     // Droplet
     const dropGeo = new THREE.SphereGeometry(0.06, 16, 16);
     const dropMat = new THREE.MeshPhysicalMaterial({
-        color: 0x88ccff,
+        color: 0x0088cc,
         metalness: 0.1,
-        roughness: 0.05,
+        roughness: 0.0,
+        transmission: 0.9,
+        ior: 1.33,
         transparent: true,
-        opacity: 0.8
+        opacity: 1.0
     });
     dropMesh = new THREE.Mesh(dropGeo, dropMat);
     dropMesh.visible = false;
@@ -177,8 +183,9 @@ function initWaterBowl3D() {
 let waterInteractionState = 0;
 let lastDropTime = 0;
 let dropState = 1.0;
+let currentDropInterval = 1.5;
 
-function renderWaterBowl3D(progress, time, isCeremonyActive) {
+function renderWaterBowl3D(progress, time, isCeremonyActive, totalSeconds = 60) {
     if (!isBowlInitialized) {
         if (typeof THREE === 'undefined') return;
         initWaterBowl3D();
@@ -222,8 +229,6 @@ function renderWaterBowl3D(progress, time, isCeremonyActive) {
             waterMesh.position.y = waterSurfaceY;
             
             // Calculate radius to perfectly fit the bowl curve at this height
-            // Bowl radius R = 2.5
-            // Sphere eq: x^2 + y^2 = R^2 -> x = sqrt(R^2 - y^2)
             const R = 2.48; // Inner radius
             let radius = Math.sqrt(Math.max(0, R*R - waterSurfaceY*waterSurfaceY));
             waterMesh.scale.set(radius, 1.0, radius);
@@ -232,14 +237,23 @@ function renderWaterBowl3D(progress, time, isCeremonyActive) {
     
     if (dropMesh) {
         if (!isCeremonyActive && fillFrac < 0.99) {
-            if (time - lastDropTime > 1.5) {
+            
+            // Dynamically calculate drop interval so the number of drops is proportional to time
+            // Assume the bowl holds roughly 60-80 drops.
+            const targetDrops = 80;
+            let targetInterval = totalSeconds / targetDrops;
+            // clamp to a reasonable visual range (0.3s very fast to 4.0s slow zen drip)
+            targetInterval = Math.max(0.3, Math.min(targetInterval, 4.0));
+            
+            if (time - lastDropTime > targetInterval) {
                 lastDropTime = time;
                 dropState = 0.0;
                 dropMesh.visible = true;
             }
             
             if (dropState < 1.0) {
-                dropState += 0.04;
+                // fall speed should be reasonably fast regardless of interval
+                dropState += 0.05;
                 const startY = 2.0;
                 const endY = waterSurfaceY;
                 

@@ -724,7 +724,7 @@ function tickFocus(now) {
   // NOTE: resizeFocusCanvas() NOT called every frame — only on resize event
 
   // Draw
-  drawVibe(focusCtx, focusCanvas.width / RENDER_DPR, focusCanvas.height / RENDER_DPR, prog, state.vibe, now / 1000);
+  drawVibe(focusCtx, focusCanvas.width / RENDER_DPR, focusCanvas.height / RENDER_DPR, prog, state.vibe, now / 1000, state.totalSeconds);
 
   // HUD
   const remaining = Math.max(0, state.totalSeconds - elapsed);
@@ -843,8 +843,8 @@ function tickComplete(timestamp) {
     completeCtx.scale(dpr, dpr);
   }
   
-  // Render the vibe at 100% progress
-  drawVibe(completeCtx, w, h, 1.0, state.vibe, time);
+  // Render ceremony vibe
+  drawVibe(completeCtx, w, h, 1.0, state.vibe, time, state.totalSeconds || 60);
   
   completeAnimationId = requestAnimationFrame(tickComplete);
 }
@@ -961,7 +961,7 @@ function showHud() {
 /* ══════════════════════════════════════════════════════════
    Draw dispatcher
 ══════════════════════════════════════════════════════════ */
-function drawVibe(ctx, W, H, progress, vibe, time) {
+function drawVibe(ctx, W, H, progress, vibe, time, totalSeconds = 60) {
   ctx.clearRect(0, 0, W, H);
   
   const waterBowlCanvas = document.getElementById('water-bowl-canvas');
@@ -984,7 +984,7 @@ function drawVibe(ctx, W, H, progress, vibe, time) {
           
           if (typeof renderWaterBowl3D !== 'undefined') {
               const isCeremony = ctx.canvas.id === 'complete-canvas'; 
-              renderWaterBowl3D(progress, time, isCeremony);
+              renderWaterBowl3D(progress, time, isCeremony, totalSeconds);
           }
           return; // Skip 2D rendering for the main canvas when 3D is active
       } else {
