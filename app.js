@@ -619,7 +619,7 @@ btnStart.addEventListener('click', () => {
   state.startTime    = null;
   
   // Important for iOS/Safari: init/resume AudioContext directly in click handler
-  initAudioCtx();
+  unlockAudioCtx();
 
   // GA4: track session start
   if (typeof gtag === 'function') {

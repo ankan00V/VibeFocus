@@ -2673,6 +2673,8 @@ body.vibe-selected-gallery #screen-complete::after {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: relative;
+  z-index: 1001;
 }
 
 .theme-dark .hero-nav {
@@ -2882,11 +2884,17 @@ body.vibe-selected-gallery #screen-complete::after {
   .hero-menu-btn.open .icon-menu { display: none; }
   .hero-menu-btn.open .icon-x { display: block; }
   
-  .hero-heading { font-size: 3.5rem; }
+  .hero-heading { font-size: 3rem; }
+  .hero-subtext { padding: 0 1rem; font-size: 1rem; line-height: 1.4; }
+  .hero-subtext br { display: none; }
+  .hero-video-switcher { flex-wrap: wrap; justify-content: center; margin-top: 1rem; }
+  .vid-switch { padding: 0.5rem 1rem; font-size: 0.85rem; flex: 1 1 calc(50% - 1rem); }
   .hero-stats {
   position: relative;
   z-index: 50; display: none; }
-  .hero-content-layer { padding: 1.5rem; }
+  .hero-content-layer { padding: 1.5rem 1rem; }
+  .hero-center { transform: translateY(0); padding-top: 1rem; }
+  .hero-badge { margin-bottom: 1rem; }
 }
 /* How It Works Modal */
 .hiw-modal-overlay {
