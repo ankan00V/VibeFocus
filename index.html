@@ -124,21 +124,8 @@
     </div>
   </div>
 
-  <!-- ── Spline 3D interactive scene (landing background) ── -->
-  <script type="module" src="https://unpkg.com/@splinetool/viewer@1.9.82/build/spline-viewer.js"></script>
-  <spline-viewer
-    id="spline-bg"
-    url="https://prod.spline.design/GKO-itiZ3LocbH0v/scene.splinecode"
-    loading="lazy"
-    events-target="global"
-    logo="hidden"
-    aria-hidden="true"
-  ></spline-viewer>
-  <!-- Cover for Spline watermark -->
-  <div id="spline-logo-cover" aria-hidden="true"></div>
-
-  <!-- ── Dark scrim: fades from left (dark) to right (transparent), separates content from Spline ── -->
-  <div id="landing-scrim" aria-hidden="true"></div>
+  <!-- ── Dark scrim: fades from left (dark) to right (transparent), separates content ── -->
+  <div class="hero-dark-scrim" aria-hidden="true"></div>
 
   <!-- ── Fade overlay for transitions ── -->
   <div id="fade-overlay" aria-hidden="true"></div>
@@ -290,7 +277,7 @@
 
     <div class="vibe-grid" role="list">
 
-      <button class="vibe-card" id="vibe-ice" data-vibe="ice" role="listitem" aria-label="Select Water Bowl">
+      <button class="vibe-card" id="vibe-ice" data-vibe="ice" aria-label="Select Water Bowl">
         <div class="card-glow-ring"></div>
         <div class="vibe-canvas-wrap" aria-hidden="true">
           <canvas class="vibe-preview" id="preview-ice" width="160" height="180"></canvas>
@@ -301,7 +288,7 @@
         </div>
       </button>
 
-      <button class="vibe-card" id="vibe-candle" data-vibe="candle" role="listitem" aria-label="Select Candle">
+      <button class="vibe-card" id="vibe-candle" data-vibe="candle" aria-label="Select Candle">
         <div class="card-glow-ring"></div>
         <div class="vibe-canvas-wrap" aria-hidden="true">
           <canvas class="vibe-preview" id="preview-candle" width="160" height="180"></canvas>
@@ -312,7 +299,7 @@
         </div>
       </button>
 
-      <button class="vibe-card" id="vibe-tree" data-vibe="tree" role="listitem" aria-label="Select Tree">
+      <button class="vibe-card" id="vibe-tree" data-vibe="tree" aria-label="Select Tree">
         <div class="card-glow-ring"></div>
         <div class="vibe-canvas-wrap" aria-hidden="true">
           <canvas class="vibe-preview" id="preview-tree" width="160" height="180"></canvas>
@@ -323,7 +310,7 @@
         </div>
       </button>
 
-      <button class="vibe-card" id="vibe-gallery" data-vibe="gallery" role="listitem" aria-label="Select Gallery">
+      <button class="vibe-card" id="vibe-gallery" data-vibe="gallery" aria-label="Select Gallery">
         <div class="card-glow-ring"></div>
         <div class="vibe-canvas-wrap" aria-hidden="true">
           <canvas class="vibe-preview" id="preview-gallery" width="160" height="180"></canvas>
