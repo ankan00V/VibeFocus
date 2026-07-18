@@ -139,7 +139,8 @@ function initTree3D() {
         const axis = new THREE.Vector3(0, 1, 0);
         const dir = new THREE.Vector3().subVectors(endPt, startPt).normalize();
         const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, dir);
-        geom.applyQuaternion(quaternion);
+        const matrix = new THREE.Matrix4().makeRotationFromQuaternion(quaternion);
+        geom.applyMatrix4(matrix);
         geom.translate(startPt.x, startPt.y, startPt.z);
         
         branchGeos.push(geom);
