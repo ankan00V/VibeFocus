@@ -963,6 +963,36 @@ function showHud() {
 ══════════════════════════════════════════════════════════ */
 function drawVibe(ctx, W, H, progress, vibe, time) {
   ctx.clearRect(0, 0, W, H);
+  
+  const waterBowlCanvas = document.getElementById('water-bowl-canvas');
+  const isMainCanvas = ctx.canvas.id === 'focus-canvas' || ctx.canvas.id === 'complete-canvas';
+  
+  if (waterBowlCanvas && isMainCanvas) {
+      if (vibe === 'ice') {
+          ctx.canvas.style.opacity = '0';
+          waterBowlCanvas.style.display = 'block';
+          
+          if (waterBowlCanvas.parentElement !== ctx.canvas.parentElement) {
+              ctx.canvas.parentElement.insertBefore(waterBowlCanvas, ctx.canvas);
+              waterBowlCanvas.style.position = 'absolute';
+              waterBowlCanvas.style.top = '0';
+              waterBowlCanvas.style.left = '0';
+              waterBowlCanvas.style.width = '100%';
+              waterBowlCanvas.style.height = '100%';
+              waterBowlCanvas.style.zIndex = '-1';
+          }
+          
+          if (typeof renderWaterBowl3D !== 'undefined') {
+              const isCeremony = ctx.canvas.id === 'complete-canvas'; 
+              renderWaterBowl3D(progress, time, isCeremony);
+          }
+          return; // Skip 2D rendering for the main canvas when 3D is active
+      } else {
+          ctx.canvas.style.opacity = '1';
+          waterBowlCanvas.style.display = 'none';
+      }
+  }
+
   if (vibe === 'ice')    drawWaterBowl(ctx, W, H, progress, time);
   if (vibe === 'candle') drawCandle(ctx, W, H, progress, time);
   if (vibe === 'tree')   drawTree(ctx, W, H, progress, time);

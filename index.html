@@ -459,6 +459,7 @@
         
         <div class="hero-visual">
           <canvas id="complete-canvas" aria-hidden="true"></canvas>
+          <canvas id="water-bowl-canvas" aria-hidden="true" style="display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;"></canvas>
         </div>
         
         <!-- Variant 1: Painting (Quiet Dawn) -->
@@ -582,6 +583,8 @@
   </div>
 
   <video id="pip-video" muted playsinline style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none;"></video>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="water-bowl-3d.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
