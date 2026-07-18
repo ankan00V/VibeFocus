@@ -53,6 +53,29 @@ const state = {
   confettiRaf:  null,
 };
 
+/* ── Web Worker for Background Animation Loop ── */
+let focusWorker = null;
+try {
+  const workerCode = `
+    let intervalId = null;
+    self.onmessage = function(e) {
+      if (e.data === 'start') {
+        if (!intervalId) intervalId = setInterval(() => self.postMessage('tick'), 33); // ~30 FPS
+      } else if (e.data === 'stop') {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+  `;
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  focusWorker = new Worker(URL.createObjectURL(blob));
+  focusWorker.onmessage = () => {
+    tickFocus(performance.now());
+  };
+} catch (e) {
+  console.warn("Web Worker PiP fallback disabled", e);
+}
+
 /* ── DOM ────────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
 const screens   = { hero: $('screen-hero'), vibe: $('screen-vibe'), duration: $('screen-duration'), focus: $('screen-focus'), complete: $('screen-complete') };
@@ -60,6 +83,9 @@ const focusCanvas  = $('focus-canvas');
 const focusCtx     = focusCanvas.getContext('2d');
 const confCanvas   = $('confetti-canvas');
 const confCtx      = confCanvas.getContext('2d');
+const completeCanvas = $('complete-canvas');
+let completeCtx = null;
+let completeAnimationId = null;
 const hud          = $('focus-hud');
 const hudFill      = $('hud-progress-fill');
 const hudTime      = $('hud-time-left');
@@ -67,6 +93,9 @@ const btnSound     = $('btn-sound');
 const iconOn       = $('icon-sound-on');
 const iconOff      = $('icon-sound-off');
 const btnExit      = $('btn-exit-focus');
+const btnPip       = $('btn-pip');
+const btnFullscreenToggle = $('btn-fullscreen-toggle');
+const pipVideo     = $('pip-video');
 const btnStart     = $('btn-start');
 const btnBack      = $('btn-back-vibe');
 const btnRestart   = $('btn-restart');
@@ -594,6 +623,12 @@ async function launchFocus() {
   await goTo('focus');
   resizeFocusCanvas();
   tryFullscreen();
+  
+  // Set up the PiP stream ahead of time so metadata is ready
+  if (pipVideo && !pipVideo.srcObject) {
+    pipVideo.srcObject = focusCanvas.captureStream(30);
+    pipVideo.play().catch(() => {});
+  }
 
   if (state.soundOn) {
     startAmbient(state.vibe);
@@ -601,14 +636,18 @@ async function launchFocus() {
   }
 
   state.startTime = performance.now();
-  state.rafId     = requestAnimationFrame(tickFocus);
+  if (focusWorker) {
+    focusWorker.postMessage('start');
+  } else {
+    state.rafId = requestAnimationFrame(tickFocus);
+  }
   showHud();
 }
 
 function tickFocus(now) {
   // Mobile frame throttle: skip frame if not enough time has passed
   if (IS_MOBILE && now - _lastFocusFrame < TARGET_FRAME_MS) {
-    state.rafId = requestAnimationFrame(tickFocus);
+    if (!focusWorker) state.rafId = requestAnimationFrame(tickFocus);
     return;
   }
   _lastFocusFrame = now;
@@ -628,23 +667,48 @@ function tickFocus(now) {
 
   // HUD
   const remaining = Math.max(0, state.totalSeconds - elapsed);
-  hudTime.textContent = fmt(remaining);
+  const timeStr = fmt(remaining);
+  hudTime.textContent = timeStr;
   hudFill.style.width = (prog * 100).toFixed(2) + '%';
   hudFill.setAttribute('aria-valuenow', Math.round(prog * 100));
+
+  // Draw timer directly on canvas if PiP is active
+  if (document.pictureInPictureElement === pipVideo) {
+    focusCtx.save();
+    focusCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    focusCtx.beginPath();
+    focusCtx.roundRect((focusCanvas.width / RENDER_DPR) / 2 - 60, (focusCanvas.height / RENDER_DPR) - 60, 120, 40, 20);
+    focusCtx.fill();
+    
+    focusCtx.fillStyle = '#ffffff';
+    focusCtx.font = '24px "Inter", sans-serif';
+    focusCtx.textAlign = 'center';
+    focusCtx.textBaseline = 'middle';
+    focusCtx.fillText(timeStr, (focusCanvas.width / RENDER_DPR) / 2, (focusCanvas.height / RENDER_DPR) - 40);
+    focusCtx.restore();
+  }
 
   if (elapsed >= state.totalSeconds) {
     onSessionComplete();
     return;
   }
 
-  state.rafId = requestAnimationFrame(tickFocus);
+  if (!focusWorker) {
+    state.rafId = requestAnimationFrame(tickFocus);
+  }
 }
 
 function onSessionComplete() {
-  cancelAnimationFrame(state.rafId);
-  state.rafId = null;
+  if (focusWorker) focusWorker.postMessage('stop');
+  if (state.rafId) {
+    cancelAnimationFrame(state.rafId);
+    state.rafId = null;
+  }
   stopAllSound();
   exitFullscreen();
+  if (document.pictureInPictureElement) {
+    document.exitPictureInPicture().catch(e => console.warn('Failed to exit PiP', e));
+  }
 
   // GA4: track session completion
   if (typeof gtag === 'function') {
@@ -670,16 +734,58 @@ function onSessionComplete() {
   goTo('complete').then(() => {
     resizeConfettiCanvas();
     burstConfetti();
+    startCompleteLoop();
   });
 }
 
 function stopSession() {
-  cancelAnimationFrame(state.rafId);
-  state.rafId = null;
+  if (focusWorker) focusWorker.postMessage('stop');
+  if (state.rafId) {
+    cancelAnimationFrame(state.rafId);
+    state.rafId = null;
+  }
+  if (completeAnimationId) {
+    cancelAnimationFrame(completeAnimationId);
+    completeAnimationId = null;
+  }
   stopAllSound();
   hud.classList.remove('visible');
   clearTimeout(state.hudTimer);
   exitFullscreen();
+  if (document.pictureInPictureElement) {
+    document.exitPictureInPicture().catch(e => console.warn('Failed to exit PiP', e));
+  }
+}
+
+function startCompleteLoop() {
+  if (completeAnimationId) cancelAnimationFrame(completeAnimationId);
+  if (completeCanvas) {
+    completeCtx = completeCanvas.getContext('2d');
+    state.completeStartTs = performance.now();
+    completeAnimationId = requestAnimationFrame(tickComplete);
+  }
+}
+
+function tickComplete(timestamp) {
+  if (!completeCtx) return;
+  const elapsed = timestamp - (state.completeStartTs || timestamp);
+  const time = elapsed * 0.001;
+  
+  const rect = completeCanvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = rect.width;
+  const h = rect.height;
+  
+  if (completeCanvas.width !== w * dpr || completeCanvas.height !== h * dpr) {
+    completeCanvas.width = w * dpr;
+    completeCanvas.height = h * dpr;
+    completeCtx.scale(dpr, dpr);
+  }
+  
+  // Render the vibe at 100% progress
+  drawVibe(completeCtx, w, h, 1.0, state.vibe, time);
+  
+  completeAnimationId = requestAnimationFrame(tickComplete);
 }
 
 /* Helper to clean up vibe-selected classes */
@@ -703,28 +809,50 @@ btnExit.addEventListener('click', () => {
   goTo('hero');
 });
 
+/* ── Fullscreen Toggle ── */
+if (btnFullscreenToggle) {
+  btnFullscreenToggle.addEventListener('click', () => {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      tryFullscreen();
+    } else {
+      exitFullscreen();
+    }
+  });
+}
+
+/* ── Picture-in-Picture (Widget) ── */
+if (btnPip && pipVideo) {
+  btnPip.addEventListener('click', () => {
+    try {
+      if (document.pictureInPictureElement) {
+        document.exitPictureInPicture().catch(console.warn);
+      } else if (pipVideo.webkitSupportsPresentationMode && typeof pipVideo.webkitSetPresentationMode === "function") {
+        pipVideo.webkitSetPresentationMode(pipVideo.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture");
+      } else {
+        if (pipVideo.readyState >= 1) {
+          pipVideo.requestPictureInPicture().catch(console.warn);
+        } else {
+          // Fallback if somehow not ready
+          pipVideo.onloadedmetadata = () => pipVideo.requestPictureInPicture().catch(console.warn);
+        }
+      }
+    } catch (err) {
+      console.warn('PiP failed or unsupported', err);
+    }
+  });
+}
+
 /* ── Restart ── */
 btnRestart.addEventListener('click', () => {
+  if (completeAnimationId) {
+    cancelAnimationFrame(completeAnimationId);
+    completeAnimationId = null;
+  }
   cancelAnimationFrame(state.confettiRaf);
   state.confettiRaf = null;
   clearVibeSelectedClasses();
   goTo('hero');
 });
-
-/* ── Painting 3D Tilt on Mouse Hover ── */
-(function initPaintingTilt() {
-  const canvasArt = document.querySelector('.painting-visual .canvas-art');
-  if (!canvasArt) return;
-  canvasArt.addEventListener('mousemove', (e) => {
-    const rect = canvasArt.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width - 0.5;
-    const y = (e.clientY - rect.top) / rect.height - 0.5;
-    canvasArt.style.transform = `perspective(600px) rotateY(${x * 8}deg) rotateX(${-y * 8}deg)`;
-  });
-  canvasArt.addEventListener('mouseleave', () => {
-    canvasArt.style.transform = 'perspective(600px) rotateY(0deg) rotateX(0deg)';
-  });
-})();
 
 /* ══════════════════════════════════════════════════════════
    Canvas resize
@@ -1151,6 +1279,7 @@ function drawWaterBowl(ctx, W, H, p, time) {
       // Impact interaction
       WATER.ripples.push({ x: d.x, y: hitY, r: 0, maxR: 16 + d.r * 3.5, alpha: 0.78 });
       WATER.ripples.push({ x: d.x, y: hitY, r: 0, maxR: 7 + d.r,        alpha: 0.52 });
+      if (state.soundOn && !isPreview) playDropSound();
       const nS = 5 + Math.floor(Math.random() * 4);
       for (let k = 0; k < nS; k++) {
         const ang = -PI * 0.88 + Math.random() * PI * 0.76;
@@ -2267,7 +2396,6 @@ function drawGallery(ctx, W, H, p, time) {
 /* ══════════════════════════════════════════════════════════
    VIBE PREVIEW ANIMATIONS (looped, on selection screen)
 ══════════════════════════════════════════════════════════ */
-// Preview canvases loop slowly at ~15% melt progress to show the animation
 let previewRaf       = null;
 let previewLastFrame = 0;
 // On mobile preview runs at 15fps to save battery and GPU
@@ -2424,6 +2552,34 @@ function unlockAudioCtx() {
   document.body.addEventListener(event, unlockAudioCtx, { once: true, capture: true });
 });
 
+async function playDropSound() {
+  if (!state.soundOn) return;
+  initAudioCtx();
+  const ctx = state.audioCtx;
+  const src = 'sounds/floraphonic-water-droplet-3-165638.mp3';
+  
+  let buffer = audioBuffers[src];
+  if (!buffer) {
+    try {
+      const response = await fetch(src);
+      const arrayBuffer = await response.arrayBuffer();
+      buffer = await ctx.decodeAudioData(arrayBuffer);
+      audioBuffers[src] = buffer;
+    } catch (e) {
+      console.error('Failed to load drop audio:', e);
+      return;
+    }
+  }
+  
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.6; // slightly lower volume for drops so it's not overwhelming
+  source.connect(gain);
+  gain.connect(ctx.destination);
+  source.start();
+}
+
 function stopAllSound() {
   state._loadingSrc = null;
   clearTimeout(state._audioTimer);
@@ -2448,7 +2604,7 @@ function startAmbient(vibe) {
   stopAllSound();
 
   let src = '';
-  if (vibe === 'ice')    src = 'sounds/rain.wav';
+  if (vibe === 'ice')    src = ''; // Discrete drops used instead
   if (vibe === 'candle') src = 'sounds/fire.wav';
   if (vibe === 'tree')   src = 'sounds/wind.wav';
   if (vibe === 'gallery')src = 'sounds/slow-piano-music.mp3';
