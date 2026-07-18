@@ -1,14 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-T9ZXDWGNHN"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-T9ZXDWGNHN');
-  </script>
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Free Aesthetic Pomodoro Timer & Visual Focus App | VibeFocus</title>
@@ -32,9 +25,11 @@
   <meta name="twitter:image" content="https://vibefocus.com/og-image.jpg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
-  <link rel="preload" href="videos/train-window.png" as="image" type="image/png" />
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" /></noscript>
+  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" /></noscript>
+  <link rel="preload" href="videos/train-window.webp" as="image" type="image/webp" />
   <link rel="stylesheet" href="styles.css" />
   <!-- Background handled by global videos -->
   
@@ -89,6 +84,13 @@
       }
     ]
   }
+  <!-- Google tag (gtag.js) - Moved to bottom of head to prioritize critical rendering -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-T9ZXDWGNHN"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-T9ZXDWGNHN');
   </script>
 </head>
 <body>
@@ -136,7 +138,7 @@
   <section id="screen-hero" class="screen active" aria-label="Welcome to VibeFocus">
 
     <!-- Transparent PNG Overlay -->
-    <img src="videos/train-window.png" class="hero-overlay-png" aria-hidden="true" alt="">
+    <img src="videos/train-window.webp" class="hero-overlay-png" aria-hidden="true" alt="">
 
     <!-- Main Content Container -->
     <div id="hero-content" class="hero-content-layer theme-light">
