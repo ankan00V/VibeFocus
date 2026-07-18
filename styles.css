@@ -3554,16 +3554,29 @@ body:has(#screen-hero.active):not(:has(#how-it-works-modal.active)) .global-link
   margin: 0 auto;
   text-align: center;
   position: relative;
+  padding: 0 3rem;
 }
 .about-manifesto blockquote::before {
-  content: '"';
+  content: '“';
   font-size: 6rem;
   position: absolute;
-  top: -2rem;
-  left: -1rem;
+  top: -1.5rem;
+  left: 0;
   color: var(--accent);
-  opacity: 0.3;
+  opacity: 0.25;
   font-family: 'Instrument Serif', serif;
+  line-height: 1;
+}
+.about-manifesto blockquote::after {
+  content: '”';
+  font-size: 6rem;
+  position: absolute;
+  bottom: -3.5rem;
+  right: 0;
+  color: var(--accent);
+  opacity: 0.25;
+  font-family: 'Instrument Serif', serif;
+  line-height: 1;
 }
 
 .about-values {
@@ -3856,8 +3869,9 @@ body:has(#screen-hero.active):not(:has(#how-it-works-modal.active)) .global-link
   .about-hero h1 { font-size: 2.8rem; }
   .about-hero .subtitle { font-size: 1.1rem; }
   .about-manifesto { margin: 2.5rem 0; padding: 2.5rem 0; }
-  .about-manifesto blockquote { font-size: 1.5rem; }
-  .about-manifesto blockquote::before { font-size: 4rem; top: -1.5rem; left: -0.5rem; }
+  .about-manifesto blockquote { font-size: 1.5rem; padding: 0 1.5rem; }
+  .about-manifesto blockquote::before { font-size: 4rem; top: -1rem; left: 0; }
+  .about-manifesto blockquote::after { font-size: 4rem; bottom: -2rem; right: 0; }
   .about-values { gap: 3rem; margin-top: 3rem; }
   .about-value-row { grid-template-columns: 60px 1fr; gap: 1.25rem; }
   .about-value-number { font-size: 3rem; }
