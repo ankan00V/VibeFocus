@@ -2,6 +2,7 @@ let treeScene, treeCamera, treeRenderer;
 let treeGroup;
 let leafInstancedMesh;
 let leafData = [];
+let fireflyParticles;
 let isTreeInitialized = false;
 
 const MAX_LEAVES = 1500;
@@ -27,20 +28,83 @@ function initTree3D() {
     treeCamera.lookAt(0, 8, 0);
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
     treeScene.add(ambientLight);
 
-    const rimLight = new THREE.DirectionalLight(0xbbeeff, 1.5);
+    const rimLight = new THREE.DirectionalLight(0xbbeeff, 2.5);
     rimLight.position.set(-10, 20, -10);
     treeScene.add(rimLight);
 
-    const fillLight = new THREE.DirectionalLight(0xaaffcc, 0.8);
+    const fillLight = new THREE.DirectionalLight(0xaaffcc, 1.2);
     fillLight.position.set(10, 10, 10);
     treeScene.add(fillLight);
+
+    // Magical core light inside the tree
+    const coreLight = new THREE.PointLight(LEAF_COLOR, 3, 25);
+    coreLight.position.set(0, 12, 0);
+    treeScene.add(coreLight);
 
     // Tree Group
     treeGroup = new THREE.Group();
     treeScene.add(treeGroup);
+    
+    // Fireflies Particle System
+    const fireflyGeo = new THREE.BufferGeometry();
+    const fireflyCount = 150;
+    const posArray = new Float32Array(fireflyCount * 3);
+    const phaseArray = new Float32Array(fireflyCount);
+    for(let i = 0; i < fireflyCount; i++) {
+        // Distribute them in a cylinder-like shape around the tree
+        const r = 2 + Math.random() * 20;
+        const theta = Math.random() * Math.PI * 2;
+        posArray[i*3] = Math.cos(theta) * r;
+        posArray[i*3+1] = Math.random() * 25;
+        posArray[i*3+2] = Math.sin(theta) * r;
+        phaseArray[i] = Math.random() * Math.PI * 2;
+    }
+    fireflyGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+    fireflyGeo.setAttribute('aPhase', new THREE.BufferAttribute(phaseArray, 1));
+
+    const fireflyMat = new THREE.ShaderMaterial({
+        uniforms: {
+            uTime: { value: 0 },
+            uColor: { value: new THREE.Color(LEAF_COLOR) }
+        },
+        vertexShader: `
+            uniform float uTime;
+            attribute float aPhase;
+            varying float vAlpha;
+            void main() {
+                vec3 pos = position;
+                // Gentle floating
+                pos.y += sin(uTime * 0.4 + aPhase) * 1.5;
+                pos.x += cos(uTime * 0.3 + aPhase) * 1.5;
+                pos.z += sin(uTime * 0.5 + aPhase) * 1.5;
+                vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                gl_Position = projectionMatrix * mvPosition;
+                // Size attenuation
+                gl_PointSize = 25.0 * (10.0 / -mvPosition.z);
+                // Pulsating alpha
+                vAlpha = (sin(uTime * 1.5 + aPhase) * 0.5 + 0.5) * 0.8 + 0.2;
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 uColor;
+            varying float vAlpha;
+            void main() {
+                float dist = length(gl_PointCoord - vec2(0.5));
+                if (dist > 0.5) discard;
+                // Soft glow edge
+                float intensity = pow(1.0 - (dist * 2.0), 2.0);
+                gl_FragColor = vec4(uColor * intensity, vAlpha * intensity);
+            }
+        `,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+    fireflyParticles = new THREE.Points(fireflyGeo, fireflyMat);
+    treeScene.add(fireflyParticles);
 
     // Material for Tree
     const treeMat = new THREE.MeshPhysicalMaterial({
@@ -203,6 +267,12 @@ function renderTree3D(progress, totalSeconds) {
     // Sway the whole tree gently
     treeGroup.rotation.y = Math.sin(time * 0.2) * 0.05;
     treeGroup.rotation.z = Math.cos(time * 0.3) * 0.02;
+    
+    // Update fireflies
+    if (fireflyParticles) {
+        fireflyParticles.material.uniforms.uTime.value = time;
+        fireflyParticles.rotation.y = time * -0.02; // slow orbiting
+    }
 
     // Update leaves
     const targetDropped = Math.floor(progress * leafData.length);

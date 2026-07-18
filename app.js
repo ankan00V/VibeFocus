@@ -687,8 +687,14 @@ async function launchFocus() {
   
   // Set up the PiP stream ahead of time so metadata is ready
   if (pipVideo && !pipVideo.srcObject) {
-    pipVideo.srcObject = focusCanvas.captureStream(30);
-    pipVideo.play().catch(() => {});
+    if (typeof focusCanvas.captureStream === 'function') {
+      try {
+        pipVideo.srcObject = focusCanvas.captureStream(30);
+        pipVideo.play().catch(() => {});
+      } catch(err) {
+        console.warn("captureStream failed", err);
+      }
+    }
   }
 
   if (state.soundOn) {
@@ -971,7 +977,7 @@ function drawVibe(ctx, W, H, progress, vibe, time, totalSeconds = 60) {
   if (isMainCanvas) {
       if (waterBowlCanvas) {
           if (vibe === 'ice') {
-              ctx.canvas.style.opacity = '0';
+              ctx.canvas.style.opacity = '1';
               waterBowlCanvas.style.display = 'block';
               
               if (waterBowlCanvas.parentElement !== ctx.canvas.parentElement) {
@@ -1006,6 +1012,10 @@ function drawVibe(ctx, W, H, progress, vibe, time, totalSeconds = 60) {
                   treeCanvas.style.width = '100%';
                   treeCanvas.style.height = '100%';
                   treeCanvas.style.zIndex = '-1';
+              }
+              
+              if (typeof initTree3D === 'function' && typeof isTreeInitialized !== 'undefined' && !isTreeInitialized) {
+                  initTree3D();
               }
               
               if (typeof renderTree3D !== 'undefined') {
@@ -2670,12 +2680,40 @@ function unlockAudioCtx() {
   } else {
     audioCtxUnlocked = true;
   }
+  
+  // Preload drop sound to ensure perfect timing
+  preloadDropSound();
 }
 
 // Bind unlock to the first user interaction anywhere on the document
 ['touchstart', 'click'].forEach(event => {
   document.body.addEventListener(event, unlockAudioCtx, { once: true, capture: true });
 });
+
+let dropSoundPromise = null;
+async function preloadDropSound() {
+  if (dropSoundPromise) return dropSoundPromise;
+  
+  const src = 'sounds/floraphonic-water-droplet-3-165638.mp3';
+  if (audioBuffers[src]) return audioBuffers[src];
+  
+  dropSoundPromise = (async () => {
+    try {
+      initAudioCtx();
+      const ctx = state.audioCtx;
+      const response = await fetch(src);
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = await ctx.decodeAudioData(arrayBuffer);
+      audioBuffers[src] = buffer;
+      return buffer;
+    } catch (e) {
+      console.error('Failed to load drop audio:', e);
+      return null;
+    }
+  })();
+  
+  return dropSoundPromise;
+}
 
 async function playDropSound() {
   if (!state.soundOn) return;
@@ -2685,16 +2723,9 @@ async function playDropSound() {
   
   let buffer = audioBuffers[src];
   if (!buffer) {
-    try {
-      const response = await fetch(src);
-      const arrayBuffer = await response.arrayBuffer();
-      buffer = await ctx.decodeAudioData(arrayBuffer);
-      audioBuffers[src] = buffer;
-    } catch (e) {
-      console.error('Failed to load drop audio:', e);
-      return;
-    }
+    buffer = await preloadDropSound();
   }
+  if (!buffer) return;
   
   const source = ctx.createBufferSource();
   source.buffer = buffer;

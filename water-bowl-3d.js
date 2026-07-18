@@ -141,9 +141,13 @@ function initWaterBowl3D() {
             `
             #include <alphatest_fragment>
             // Make it a perfect circle
-            if (length(vUvSurface - vec2(0.5)) > 0.5) {
+            float distToCenter = length(vUvSurface - vec2(0.5));
+            if (distToCenter > 0.5) {
                 discard;
             }
+            // Fade out near the edge to prevent clipping through the bowl
+            float edgeFade = smoothstep(0.5, 0.45, distToCenter);
+            gl_FragColor.a *= edgeFade;
             `
         );
     };
@@ -191,19 +195,26 @@ function renderWaterBowl3D(progress, time, isCeremonyActive, totalSeconds = 60) 
         initWaterBowl3D();
     }
     
-    // progress goes 0.0 (start) to 1.0 (end) in app.js
-    let fillFrac = progress; 
-    if (isCeremonyActive) {
-        fillFrac = 1.0; // fully filled on completion screen
-    }
+    // 1. Calculate discrete filling
+    // Assume we want about 1 drop every 2 seconds on average, but clamped between 1s and 5s
+    let targetInterval = totalSeconds > 0 ? (totalSeconds / 60) : 2.0; 
+    targetInterval = Math.max(1.0, Math.min(targetInterval, 5.0));
+    const totalDrops = Math.max(1, Math.floor(totalSeconds / targetInterval));
     
+    // Calculate discrete drops fallen based on elapsed time (progress * totalSeconds)
+    let dropsFallen = Math.floor((progress * totalSeconds) / targetInterval);
+    if (dropsFallen > totalDrops) dropsFallen = totalDrops;
+    
+    let fillFrac = dropsFallen / totalDrops;
+    if (isCeremonyActive) {
+        fillFrac = 1.0; 
+    }
+
     if (waterUniforms) {
         waterUniforms.uTime.value = time;
-        
         if (isCeremonyActive && waterInteractionState === 0) {
             waterInteractionState = 0.01;
         }
-        
         if (waterInteractionState > 0) {
             waterInteractionState += 0.02;
             if (waterInteractionState >= 1.0) waterInteractionState = 0;
@@ -215,9 +226,8 @@ function renderWaterBowl3D(progress, time, isCeremonyActive, totalSeconds = 60) 
         glassBowl.rotation.y = time * 0.05;
     }
     
-    // Bowl geometry spans from y=0 (rim) down to y=-2.5 (bottom)
-    const minWaterY = -2.48; // slightly above bottom to prevent z-fighting
-    const maxWaterY = -0.2;  // slightly below rim
+    const minWaterY = -2.48; 
+    const maxWaterY = -0.2;  
     const waterSurfaceY = minWaterY + (fillFrac * (maxWaterY - minWaterY));
     
     if (waterMesh) {
@@ -228,32 +238,25 @@ function renderWaterBowl3D(progress, time, isCeremonyActive, totalSeconds = 60) 
             waterMesh.rotation.y = time * 0.05;
             waterMesh.position.y = waterSurfaceY;
             
-            // Calculate radius to perfectly fit the bowl curve at this height
-            const R = 2.48; // Inner radius
+            // Slightly smaller radius to prevent clipping with waves
+            const R = 2.44; 
             let radius = Math.sqrt(Math.max(0, R*R - waterSurfaceY*waterSurfaceY));
             waterMesh.scale.set(radius, 1.0, radius);
         }
     }
     
     if (dropMesh) {
-        if (!isCeremonyActive && fillFrac < 0.99) {
+        if (!isCeremonyActive && progress < 0.999) {
             
-            // Dynamically calculate drop interval so the number of drops is proportional to time
-            // Assume the bowl holds roughly 60-80 drops.
-            const targetDrops = 80;
-            let targetInterval = totalSeconds / targetDrops;
-            // clamp to a reasonable visual range (0.3s very fast to 4.0s slow zen drip)
-            targetInterval = Math.max(0.3, Math.min(targetInterval, 4.0));
-            
-            if (time - lastDropTime > targetInterval) {
+            // Wait for the next discrete interval
+            if (time - lastDropTime > targetInterval && (dropsFallen < totalDrops)) {
                 lastDropTime = time;
                 dropState = 0.0;
                 dropMesh.visible = true;
             }
             
             if (dropState < 1.0) {
-                // fall speed should be reasonably fast regardless of interval
-                dropState += 0.05;
+                dropState += 0.04;
                 const startY = 2.0;
                 const endY = waterSurfaceY;
                 
@@ -269,9 +272,10 @@ function renderWaterBowl3D(progress, time, isCeremonyActive, totalSeconds = 60) 
                     dropMesh.position.x = 0;
                     dropMesh.position.z = 0;
                     
-                    dropMesh.scale.y = 1.0 + (dropState * 1.5);
-                    dropMesh.scale.x = 1.0 - (dropState * 0.2);
-                    dropMesh.scale.z = 1.0 - (dropState * 0.2);
+                    // Elongate the drop as it falls
+                    dropMesh.scale.y = 1.0 + (dropState * 2.0);
+                    dropMesh.scale.x = 1.0 - (dropState * 0.3);
+                    dropMesh.scale.z = 1.0 - (dropState * 0.3);
                 }
             }
         } else {
