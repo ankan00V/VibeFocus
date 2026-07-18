@@ -115,6 +115,19 @@ const heroMobileMenu = document.getElementById('hero-mobile-menu');
 const heroTitle = document.getElementById('hero-title');
 const heroSubtitle = document.getElementById('hero-subtitle');
 const btnHeroStartFocus = document.getElementById('btn-hero-start');
+const mobileMenuLinks = document.querySelectorAll('.mobile-menu-links a');
+
+if (mobileMenuLinks) {
+  mobileMenuLinks.forEach(link => {
+    link.addEventListener('click', () => {
+      if (heroMobileMenu && heroMobileMenu.classList.contains('active')) {
+        heroMobileMenu.classList.remove('active');
+        document.body.style.overflow = '';
+        heroMobileMenuBtn.classList.remove('active');
+      }
+    });
+  });
+}
 
 const HERO_VIBES = [
   {
@@ -315,7 +328,16 @@ function startHeroFocusSession() {
 btnHowItWorks.forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.preventDefault();
-    if (hiwModal) hiwModal.classList.add('active');
+    const seoContent = document.getElementById('seo-content');
+    if (seoContent) {
+      seoContent.scrollIntoView({ behavior: 'smooth' });
+    }
+    // Also close mobile menu if it's open
+    if (heroMobileMenu && heroMobileMenu.classList.contains('active')) {
+      heroMobileMenu.classList.remove('active');
+      document.body.style.overflow = '';
+      heroMobileMenuBtn.classList.remove('active');
+    }
   });
 });
 if (hiwCloseBtn) {

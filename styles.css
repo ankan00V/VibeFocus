@@ -251,6 +251,11 @@ body {
   pointer-events: none;
 }
 
+#screen-hero {
+  display: block;
+  padding: 0;
+}
+
 /* Fade overlay */
 #fade-overlay {
   position: fixed;
