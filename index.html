@@ -104,23 +104,23 @@
   <div class="hero-bg">
     <!-- Slot 0: Golden Hour -->
     <div class="hero-vid-slot active-slot" data-slot="0">
-      <video class="hero-video layer-a" src="videos/golden-hour.mp4" preload="auto" muted playsinline></video>
-      <video class="hero-video layer-b" src="videos/golden-hour.mp4" preload="auto" muted playsinline></video>
+      <video class="hero-video layer-a" src="videos/golden-hour.mp4" preload="none" aria-hidden="true" muted playsinline></video>
+      <video class="hero-video layer-b" src="videos/golden-hour.mp4" preload="none" aria-hidden="true" muted playsinline></video>
     </div>
     <!-- Slot 1: Still Water -->
     <div class="hero-vid-slot" data-slot="1">
-      <video class="hero-video layer-a" src="videos/still-water.mp4" preload="auto" muted playsinline></video>
-      <video class="hero-video layer-b" src="videos/still-water.mp4" preload="auto" muted playsinline></video>
+      <video class="hero-video layer-a" src="videos/still-water.mp4" preload="none" aria-hidden="true" muted playsinline></video>
+      <video class="hero-video layer-b" src="videos/still-water.mp4" preload="none" aria-hidden="true" muted playsinline></video>
     </div>
     <!-- Slot 2: Deep Woods -->
     <div class="hero-vid-slot" data-slot="2">
-      <video class="hero-video layer-a" src="videos/deep-woods.mp4" preload="auto" muted playsinline></video>
-      <video class="hero-video layer-b" src="videos/deep-woods.mp4" preload="auto" muted playsinline></video>
+      <video class="hero-video layer-a" src="videos/deep-woods.mp4" preload="none" aria-hidden="true" muted playsinline></video>
+      <video class="hero-video layer-b" src="videos/deep-woods.mp4" preload="none" aria-hidden="true" muted playsinline></video>
     </div>
     <!-- Slot 3: Quiet Dawn -->
     <div class="hero-vid-slot" data-slot="3">
-      <video class="hero-video layer-a" src="videos/quiet-dawn.mp4" preload="auto" muted playsinline></video>
-      <video class="hero-video layer-b" src="videos/quiet-dawn.mp4" preload="auto" muted playsinline></video>
+      <video class="hero-video layer-a" src="videos/quiet-dawn.mp4" preload="none" aria-hidden="true" muted playsinline></video>
+      <video class="hero-video layer-b" src="videos/quiet-dawn.mp4" preload="none" aria-hidden="true" muted playsinline></video>
     </div>
   </div>
 
@@ -148,11 +148,7 @@
   ══════════════════════════════════════════ -->
   <section id="screen-hero" class="screen active" aria-label="Welcome to VibeFocus">
 
-    <!-- Transparent PNG Overlay with train-bob stacked to make translucent frame fully solid -->
-    <img src="videos/train-window.png" class="hero-overlay-png" aria-hidden="true" alt="">
-    <img src="videos/train-window.png" class="hero-overlay-png" aria-hidden="true" alt="">
-    <img src="videos/train-window.png" class="hero-overlay-png" aria-hidden="true" alt="">
-    <img src="videos/train-window.png" class="hero-overlay-png" aria-hidden="true" alt="">
+    <!-- Transparent PNG Overlay -->
     <img src="videos/train-window.png" class="hero-overlay-png" aria-hidden="true" alt="">
 
     <!-- Main Content Container -->
@@ -468,7 +464,7 @@
           <div class="dur-pill custom-wide" id="dur-custom" role="button" tabindex="0" aria-label="Custom duration">
             <div class="pill-content">
               <div class="custom-input-group">
-                <input type="number" id="custom-minutes" min="1" max="120" value="10" />
+                <input type="number" id="custom-minutes" min="1" max="120" value="10" aria-label="Custom minutes" />
                 <span class="pill-unit">min</span>
               </div>
               <div class="pill-hairline"></div>
@@ -497,7 +493,7 @@
     <div id="focus-hud" class="focus-hud">
       <div class="hud-left">
         <div class="hud-progress-track" aria-label="Session progress">
-          <div id="hud-progress-fill" class="hud-progress-fill" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+          <div id="hud-progress-fill" class="hud-progress-fill" role="progressbar" aria-label="Timer Progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
         </div>
         <span id="hud-time-left" class="hud-time" aria-live="off">25:00</span>
       </div>
