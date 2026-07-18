@@ -14,9 +14,11 @@ function initTree3D() {
     const canvas = document.getElementById('tree-canvas');
     if (!canvas) return;
 
-    treeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+    treeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true, powerPreference: "high-performance" });
     treeRenderer.setSize(canvas.clientWidth, canvas.clientHeight);
     treeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    treeRenderer.shadowMap.enabled = true;
+    treeRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     treeScene = new THREE.Scene();
 
@@ -36,7 +38,17 @@ function initTree3D() {
     treeScene.add(rimLight);
 
     const fillLight = new THREE.DirectionalLight(0xaaffcc, 1.2);
-    fillLight.position.set(10, 10, 10);
+    fillLight.position.set(15, 25, 15);
+    fillLight.castShadow = true;
+    fillLight.shadow.mapSize.width = 1024;
+    fillLight.shadow.mapSize.height = 1024;
+    fillLight.shadow.camera.near = 0.5;
+    fillLight.shadow.camera.far = 100;
+    fillLight.shadow.camera.left = -25;
+    fillLight.shadow.camera.right = 25;
+    fillLight.shadow.camera.top = 25;
+    fillLight.shadow.camera.bottom = -25;
+    fillLight.shadow.bias = -0.001;
     treeScene.add(fillLight);
 
     // Magical core light inside the tree
@@ -107,12 +119,10 @@ function initTree3D() {
     treeScene.add(fireflyParticles);
 
     // Material for Tree
-    const treeMat = new THREE.MeshPhysicalMaterial({
+    const treeMat = new THREE.MeshStandardMaterial({
         color: TREE_COLOR,
-        metalness: 0.8,
-        roughness: 0.2,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.1
+        metalness: 0.1,
+        roughness: 0.85
     });
 
     // Procedural Tree Generation
@@ -170,6 +180,8 @@ function initTree3D() {
     const treeMeshGroup = new THREE.Group();
     branchGeos.forEach(geom => {
         const mesh = new THREE.Mesh(geom, treeMat);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         treeMeshGroup.add(mesh);
     });
     treeGroup.add(treeMeshGroup);
@@ -188,6 +200,8 @@ function initTree3D() {
 
     const actualLeaves = Math.min(MAX_LEAVES, leafPositions.length);
     leafInstancedMesh = new THREE.InstancedMesh(leafGeom, leafMat, actualLeaves);
+    leafInstancedMesh.castShadow = true;
+    leafInstancedMesh.receiveShadow = true;
     
     // Initialize leaf data
     const dummy = new THREE.Object3D();
@@ -227,6 +241,7 @@ function initTree3D() {
     const ground = new THREE.Mesh(groundGeom, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = 0;
+    ground.receiveShadow = true;
     treeScene.add(ground);
 
     isTreeInitialized = true;
