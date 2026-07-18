@@ -2675,6 +2675,10 @@ body.vibe-selected-gallery #screen-complete::after {
   align-items: center;
 }
 
+.theme-dark .hero-nav {
+  color: #ffffff;
+}
+
 .hero-logo {
   font-family: 'Instrument Serif', serif;
   font-size: 2rem;
