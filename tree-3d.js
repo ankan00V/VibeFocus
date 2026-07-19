@@ -215,8 +215,8 @@ function initTree3D() {
     const extrudeSettings = { depth: 0.03, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: 0.02, bevelThickness: 0.02 };
     const leafGeom = new THREE.ExtrudeGeometry(leafShape, extrudeSettings);
     leafGeom.center();
-    // Base scale for leaves (larger than before)
-    leafGeom.scale(0.75, 0.75, 0.75);
+    // Base scale for leaves (much larger to compensate for fewer mathematically allowed leaves)
+    leafGeom.scale(1.2, 1.2, 1.2);
 
     const leafMat = new THREE.MeshStandardMaterial({
         color: 0xffffff, // White base to let instance colors show
@@ -255,7 +255,7 @@ function initTree3D() {
             grounded: false,
             phase: Math.random() * Math.PI * 2,
             baseWind: { x: 0, z: 0 },
-            scale: 0.7 + Math.random() * 0.9 // Randomize leaf sizes (larger overall)
+            scale: 1.0 + Math.random() * 1.2 // Randomize leaf sizes (huge overall)
         });
 
         // Unique shade for each leaf
@@ -360,10 +360,11 @@ function renderTree3D(progress, totalSeconds) {
     if (totalSeconds !== lastTotalSecondsForLeaves || progress < 0.001) {
         lastTotalSecondsForLeaves = totalSeconds;
         
-        // Base of 150 leaves for 0 minutes. Adds roughly 7 leaves for every 1 minute added.
-        // E.g. 1 min = 157 leaves, 60 min = 570 leaves, 120 min = 990 leaves.
-        const targetLeaves = Math.floor(150 + (totalSeconds / 60) * 7);
-        activeLeafCount = Math.max(150, Math.min(leafData.length, targetLeaves));
+        // To guarantee a 2.5 - 3.0 second wait between drops while also dropping 100% of leaves,
+        // we can mathematically only allocate a specific amount of leaves per second.
+        // E.g. 1 min = ~72 leaves. 120 min = 1000 leaves (maxed).
+        const targetLeaves = Math.floor(totalSeconds * 1.2);
+        activeLeafCount = Math.max(10, Math.min(leafData.length, targetLeaves));
         
         leafInstancedMesh.count = activeLeafCount;
 
@@ -414,19 +415,23 @@ function renderTree3D(progress, totalSeconds) {
         let dropsThisFrame = 0;
         
         if (time > nextClusterTime || effectiveProgress >= 1.0) {
-            // Drop a natural cluster of 1 to 5 leaves (strict cap at 5)
-            dropsThisFrame = Math.floor(Math.random() * 5) + 1;
+            
+            // To ensure we drop enough leaves within the strict gap limit,
+            // we bias towards 3-5 leaves if the queue is building up.
+            if (detachmentQueue > 10) {
+                 dropsThisFrame = Math.floor(Math.random() * 3) + 3; // 3 to 5
+            } else {
+                 dropsThisFrame = Math.floor(Math.random() * 3) + 1; // 1 to 3
+            }
             dropsThisFrame = Math.min(dropsThisFrame, detachmentQueue);
             
-            // Determine the gap before the next cluster falls
-            let gap = Math.random() * 2.0 + 0.5; // Natural gap: 0.5s to 2.5s
+            // The strict user requirement: at least 2.5 - 3 seconds wait!
+            let gap = Math.random() * 1.0 + 2.5; // Natural gap: 2.5s to 3.5s
             
-            // If we are falling behind, shorten the gap instead of dropping 50 at once
-            if (detachmentQueue > 15) {
-                gap = 0.2; 
-            }
-            if (effectiveProgress >= 1.0) {
-                gap = 0.1; // Fast flush at the end
+            // To guarantee the tree is empty by the last second, we only break the rule at the very end.
+            if (effectiveProgress >= 0.95) {
+                gap = 0.2; // Fast flush at the 95% mark
+                dropsThisFrame = Math.min(15, detachmentQueue);
             }
             
             nextClusterTime = time + gap;
