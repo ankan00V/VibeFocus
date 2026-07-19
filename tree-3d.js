@@ -9,6 +9,9 @@ let currentTargetDropped = 0;
 let detachmentQueue = 0; // Number of leaves waiting to be detached smoothly
 let lastLeafDropTime = 0;
 
+let activeLeafCount = 800; // Will scale dynamically based on timer duration
+let lastTotalSecondsForLeaves = 0;
+
 const MAX_LEAVES = 800;
 const TREE_COLOR = 0x0a0f12; // Dark obsidian
 const LEAF_COLOR = 0xa8d870; // Glowing ethereal green
@@ -225,6 +228,12 @@ function initTree3D() {
         opacity: 0.95
     });
 
+    // Shuffle leafPositions so that picking a subset renders them evenly across the tree
+    for (let i = leafPositions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [leafPositions[i], leafPositions[j]] = [leafPositions[j], leafPositions[i]];
+    }
+
     const actualLeaves = Math.min(MAX_LEAVES, leafPositions.length);
     leafInstancedMesh = new THREE.InstancedMesh(leafGeom, leafMat, actualLeaves);
     leafInstancedMesh.castShadow = true;
@@ -316,7 +325,6 @@ function initTree3D() {
 function resetTree3D() {
     if (!isTreeInitialized) return;
     currentTargetDropped = 0;
-    nextDropProgress = 0;
     for (let i = 0; i < leafData.length; i++) {
         const leaf = leafData[i];
         leaf.attached = true;
@@ -348,8 +356,36 @@ function renderTree3D(progress, totalSeconds) {
         fireflyParticles.rotation.y = time * -0.02; // slow orbiting
     }
 
+    // Determine how many leaves to render based on timer duration
+    // A 1 minute timer will have fewer leaves (~50), a 120 minute timer will have max leaves (800)
+    // Targeting roughly 1 leaf drop every 3 seconds
+    if (totalSeconds !== lastTotalSecondsForLeaves || progress < 0.001) {
+        lastTotalSecondsForLeaves = totalSeconds;
+        const targetLeaves = Math.floor(totalSeconds / 3);
+        activeLeafCount = Math.max(50, Math.min(leafData.length, targetLeaves));
+        
+        leafInstancedMesh.count = activeLeafCount;
+
+        if (progress < 0.01) {
+            currentTargetDropped = 0;
+            detachmentQueue = 0;
+            for (let i = 0; i < activeLeafCount; i++) {
+                leafData[i].attached = true;
+                leafData[i].grounded = false;
+                leafData[i].pos.copy(leafData[i].startPos);
+                leafData[i].vel.set(0,0,0);
+            }
+        }
+    }
+
+    // Scale progress so that 100% of leaves are dropped 2 seconds BEFORE the timer hits 0
+    // This gives the last leaf time to fall to the ground while the timer is still running
+    const timeElapsed = progress * totalSeconds;
+    const targetDetachmentTime = Math.max(1, totalSeconds - 2);
+    const effectiveProgress = Math.min(1.0, timeElapsed / targetDetachmentTime);
+
     // Update leaves
-    const idealDropped = Math.floor(progress * leafData.length);
+    const idealDropped = Math.floor(effectiveProgress * activeLeafCount);
     
     // Accumulate leaves to drop based on exact progress
     if (idealDropped > currentTargetDropped) {
@@ -362,12 +398,12 @@ function renderTree3D(progress, totalSeconds) {
     }
 
     // Force ALL leaves to drop at the very end
-    if (progress >= 0.999) {
-        detachmentQueue = leafData.length;
+    if (effectiveProgress >= 1.0) {
+        detachmentQueue = activeLeafCount - currentTargetDropped;
     }
 
     let currentlyDropped = 0;
-    for (let i = 0; i < leafData.length; i++) {
+    for (let i = 0; i < activeLeafCount; i++) {
         if (!leafData[i].attached) currentlyDropped++;
     }
 
@@ -382,7 +418,7 @@ function renderTree3D(progress, totalSeconds) {
         } else {
             // For smaller queues, add some randomness so they don't fall too rhythmically
             // Drop 1 or 2 leaves occasionally
-            if (Math.random() < 0.15 || progress >= 0.999) {
+            if (Math.random() < 0.15 || effectiveProgress >= 1.0) {
                 dropsThisFrame = Math.floor(Math.random() * 3) + 1; // 1 to 3 leaves
             }
         }
@@ -392,7 +428,7 @@ function renderTree3D(progress, totalSeconds) {
         let attempts = 0;
         let successfullyDropped = 0;
         while (successfullyDropped < dropsThisFrame && attempts < 1000) {
-            let idx = Math.floor(Math.random() * leafData.length);
+            let idx = Math.floor(Math.random() * activeLeafCount);
             if (leafData[idx].attached) {
                 leafData[idx].attached = false;
                 // Strong wind burst when detaching, random directions
@@ -415,7 +451,7 @@ function renderTree3D(progress, totalSeconds) {
     }
 
     const dummy = new THREE.Object3D();
-    for (let i = 0; i < leafData.length; i++) {
+    for (let i = 0; i < activeLeafCount; i++) {
         const leaf = leafData[i];
 
         if (!leaf.attached && !leaf.grounded) {
