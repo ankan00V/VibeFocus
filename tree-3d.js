@@ -9,10 +9,10 @@ let currentTargetDropped = 0;
 let detachmentQueue = 0; // Number of leaves waiting to be detached smoothly
 let nextClusterTime = 0;
 
-let activeLeafCount = 4000; // Will scale dynamically based on timer duration
+let activeLeafCount = 8000; // Will scale dynamically based on timer duration
 let lastTotalSecondsForLeaves = 0;
 
-const MAX_LEAVES = 4000;
+const MAX_LEAVES = 8000;
 const TREE_COLOR = 0x0a0f12; // Dark obsidian
 const LEAF_COLOR = 0xa8d870; // Glowing ethereal green
 const LEAF_EMISSIVE = 0x55aa33;
@@ -177,8 +177,8 @@ function initTree3D() {
         branchGeos.push(geom);
 
         // Add leaves at the end of branches (mostly at higher depths)
-        if (depth <= 2 || Math.random() < 0.3) {
-            const numLeaves = depth === 1 ? 5 : 2;
+        if (depth <= 4 || Math.random() < 0.5) {
+            const numLeaves = depth <= 2 ? 15 : 6;
             for(let i=0; i<numLeaves; i++) {
                 leafPositions.push(new THREE.Vector3(
                     endPt.x + (Math.random()-0.5)*2,
@@ -442,17 +442,21 @@ function renderTree3D(progress, totalSeconds) {
         
         if (time > nextClusterTime || effectiveProgress >= 1.0) {
             
-            // To ensure we drop enough leaves within the strict gap limit,
-            // we bias towards 3-5 leaves if the queue is building up.
             if (detachmentQueue > 10) {
-                 dropsThisFrame = Math.floor(Math.random() * 3) + 3; // 3 to 5
+                dropsThisFrame = Math.floor(Math.random() * 3) + 3; // 3 to 5
             } else {
-                 dropsThisFrame = Math.floor(Math.random() * 3) + 1; // 1 to 3
+                dropsThisFrame = Math.floor(Math.random() * 2) + 1; // 1 to 2
             }
             dropsThisFrame = Math.min(dropsThisFrame, detachmentQueue);
+
+            // Calculate mathematically perfect gap to pace the leaves evenly over the remaining time
+            let baseGap = totalSeconds / activeLeafCount;
+            if (baseGap > 3.0) baseGap = 3.0; // Strictly ensure we NEVER wait more than 3 seconds!
             
-            // The strict user requirement: randomly between 2.5 - 3 seconds wait!
-            let gap = Math.random() * 0.5 + 2.5; // Natural gap: 2.5s to 3.0s
+            // Apply slight natural randomness (±20%)
+            let gap = baseGap * (0.8 + Math.random() * 0.4);
+            
+            nextClusterTime = time + gap;
             
             // To guarantee the tree is empty by the last second, we only break the rule at the very end.
             if (effectiveProgress >= 0.95) {
