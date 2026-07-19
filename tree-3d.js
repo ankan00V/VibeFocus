@@ -59,6 +59,20 @@ function initTree3D() {
     coreLight.position.set(0, 12, 0);
     treeScene.add(coreLight);
 
+    // Stars Background
+    const starsGeo = new THREE.BufferGeometry();
+    const starsCount = 1500;
+    const starPos = new Float32Array(starsCount * 3);
+    for(let i=0; i<starsCount; i++) {
+        starPos[i*3] = (Math.random() - 0.5) * 300;
+        starPos[i*3+1] = Math.random() * 150;
+        starPos[i*3+2] = (Math.random() - 0.5) * 300 - 50;
+    }
+    starsGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    const starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, transparent: true, opacity: 0.8 });
+    const starParticles = new THREE.Points(starsGeo, starsMat);
+    treeScene.add(starParticles);
+
     // Tree Group
     treeGroup = new THREE.Group();
     treeScene.add(treeGroup);
@@ -219,7 +233,8 @@ function initTree3D() {
             rotVel: new THREE.Vector3((Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1, (Math.random()-0.5)*0.1),
             attached: true,
             grounded: false,
-            phase: Math.random() * Math.PI * 2
+            phase: Math.random() * Math.PI * 2,
+            baseWind: { x: 0, z: 0 }
         });
 
         dummy.position.copy(pos);
@@ -231,21 +246,39 @@ function initTree3D() {
     
     treeGroup.add(leafInstancedMesh);
 
-    // Add a dark glossy ground plane
-    const groundGeom = new THREE.PlaneGeometry(100, 100);
-    const groundMat = new THREE.MeshPhysicalMaterial({
-        color: 0x05080a,
-        metalness: 0.9,
-        roughness: 0.1,
-        clearcoat: 1.0,
-        transparent: true,
-        opacity: 0.8
+    // Add a dark grassy ground plane
+    const groundGeom = new THREE.PlaneGeometry(150, 150);
+    const groundMat = new THREE.MeshStandardMaterial({
+        color: 0x051108, // Dark grass green
+        roughness: 0.9,
+        metalness: 0.1
     });
     const ground = new THREE.Mesh(groundGeom, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = 0;
     ground.receiveShadow = true;
     treeScene.add(ground);
+
+    // Grass blades
+    const grassGeo = new THREE.ConeGeometry(0.15, 1.5, 3);
+    const grassMat = new THREE.MeshStandardMaterial({ color: 0x0a1f0f, roughness: 0.9 });
+    const grassCount = 3000;
+    const grassInstanced = new THREE.InstancedMesh(grassGeo, grassMat, grassCount);
+    grassInstanced.receiveShadow = true;
+    
+    const dummyGrass = new THREE.Object3D();
+    for(let i=0; i<grassCount; i++) {
+        const r = 2 + Math.random() * 60; 
+        const theta = Math.random() * Math.PI * 2;
+        dummyGrass.position.set(Math.cos(theta)*r, 0.75, Math.sin(theta)*r);
+        dummyGrass.rotation.y = Math.random() * Math.PI;
+        dummyGrass.rotation.x = (Math.random() - 0.5) * 0.4;
+        dummyGrass.rotation.z = (Math.random() - 0.5) * 0.4;
+        dummyGrass.scale.setScalar(0.3 + Math.random() * 0.8);
+        dummyGrass.updateMatrix();
+        grassInstanced.setMatrixAt(i, dummyGrass.matrix);
+    }
+    treeScene.add(grassInstanced);
 
     isTreeInitialized = true;
 
@@ -336,12 +369,16 @@ function renderTree3D(progress, totalSeconds) {
         let idx = Math.floor(Math.random() * leafData.length);
         if (leafData[idx].attached) {
             leafData[idx].attached = false;
-            // Strong wind burst when detaching
+            // Strong wind burst when detaching, random directions
+            const windDirX = (Math.random() - 0.5) * 0.3;
+            const windDirZ = (Math.random() - 0.5) * 0.3;
             leafData[idx].vel.set(
-                (Math.random() - 0.2) * 0.2, // wind blowing right mostly
+                windDirX,
                 0.05 + Math.random() * 0.05, // slight uplift
-                (Math.random() - 0.5) * 0.2
+                windDirZ
             );
+            leafData[idx].baseWind.x = windDirX * 0.06;
+            leafData[idx].baseWind.z = windDirZ * 0.06;
             currentlyDropped++;
         }
         attempts++;
@@ -355,9 +392,9 @@ function renderTree3D(progress, totalSeconds) {
             // Falling Physics
             leaf.vel.y -= 0.0025; // Gravity
             
-            // Wind drift - blown out by the wind
-            const windForceX = Math.sin(time * 1.5 + leaf.phase) * 0.01 + 0.008; 
-            const windForceZ = Math.cos(time * 1.2 + leaf.phase) * 0.01;
+            // Wind drift - individual trajectories mixed with time
+            const windForceX = Math.sin(time * 1.5 + leaf.phase) * 0.01 + leaf.baseWind.x; 
+            const windForceZ = Math.cos(time * 1.2 + leaf.phase) * 0.01 + leaf.baseWind.z;
             
             leaf.vel.x += windForceX;
             leaf.vel.z += windForceZ;
