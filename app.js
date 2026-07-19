@@ -686,10 +686,14 @@ async function launchFocus() {
   tryFullscreen();
   
   // Set up the PiP stream ahead of time so metadata is ready
-  if (pipVideo && !pipVideo.srcObject) {
-    if (typeof focusCanvas.captureStream === 'function') {
+  if (pipVideo) {
+    let targetCanvas = focusCanvas;
+    if (state.vibe === 'ice') targetCanvas = document.getElementById('water-bowl-canvas');
+    if (state.vibe === 'tree') targetCanvas = document.getElementById('tree-canvas');
+    
+    if (targetCanvas && typeof targetCanvas.captureStream === 'function') {
       try {
-        pipVideo.srcObject = focusCanvas.captureStream(30);
+        pipVideo.srcObject = targetCanvas.captureStream(30);
         pipVideo.play().catch(() => {});
       } catch(err) {
         console.warn("captureStream failed", err);
