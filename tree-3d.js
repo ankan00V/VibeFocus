@@ -9,10 +9,10 @@ let currentTargetDropped = 0;
 let detachmentQueue = 0; // Number of leaves waiting to be detached smoothly
 let nextClusterTime = 0;
 
-let activeLeafCount = 800; // Will scale dynamically based on timer duration
+let activeLeafCount = 1000; // Will scale dynamically based on timer duration
 let lastTotalSecondsForLeaves = 0;
 
-const MAX_LEAVES = 800;
+const MAX_LEAVES = 1000;
 const TREE_COLOR = 0x0a0f12; // Dark obsidian
 const LEAF_COLOR = 0xa8d870; // Glowing ethereal green
 const LEAF_EMISSIVE = 0x55aa33;
@@ -216,7 +216,7 @@ function initTree3D() {
     const leafGeom = new THREE.ExtrudeGeometry(leafShape, extrudeSettings);
     leafGeom.center();
     // Base scale for leaves (larger than before)
-    leafGeom.scale(0.55, 0.55, 0.55);
+    leafGeom.scale(0.75, 0.75, 0.75);
 
     const leafMat = new THREE.MeshStandardMaterial({
         color: 0xffffff, // White base to let instance colors show
@@ -255,7 +255,7 @@ function initTree3D() {
             grounded: false,
             phase: Math.random() * Math.PI * 2,
             baseWind: { x: 0, z: 0 },
-            scale: 0.6 + Math.random() * 0.8 // Randomize leaf sizes (small, medium, large)
+            scale: 0.7 + Math.random() * 0.9 // Randomize leaf sizes (larger overall)
         });
 
         // Unique shade for each leaf
@@ -357,12 +357,13 @@ function renderTree3D(progress, totalSeconds) {
     }
 
     // Determine how many leaves to render based on timer duration
-    // A 1 minute timer will have fewer leaves (~50), a 120 minute timer will have max leaves (800)
-    // Targeting roughly 1 leaf drop every 3 seconds
     if (totalSeconds !== lastTotalSecondsForLeaves || progress < 0.001) {
         lastTotalSecondsForLeaves = totalSeconds;
-        const targetLeaves = Math.floor(totalSeconds / 3);
-        activeLeafCount = Math.max(50, Math.min(leafData.length, targetLeaves));
+        
+        // Base of 150 leaves for 0 minutes. Adds roughly 7 leaves for every 1 minute added.
+        // E.g. 1 min = 157 leaves, 60 min = 570 leaves, 120 min = 990 leaves.
+        const targetLeaves = Math.floor(150 + (totalSeconds / 60) * 7);
+        activeLeafCount = Math.max(150, Math.min(leafData.length, targetLeaves));
         
         leafInstancedMesh.count = activeLeafCount;
 
