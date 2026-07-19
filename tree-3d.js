@@ -203,16 +203,24 @@ function initTree3D() {
     });
     treeGroup.add(treeMeshGroup);
 
-    // Leaves InstancedMesh
-    const leafGeom = new THREE.OctahedronGeometry(0.3, 0);
+    // Leaves InstancedMesh - Procedural Leaf Shape
+    const leafShape = new THREE.Shape();
+    leafShape.moveTo(0, 0);
+    leafShape.quadraticCurveTo(0.5, 0.3, 0, 1.2);
+    leafShape.quadraticCurveTo(-0.5, 0.3, 0, 0);
+    const extrudeSettings = { depth: 0.03, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: 0.02, bevelThickness: 0.02 };
+    const leafGeom = new THREE.ExtrudeGeometry(leafShape, extrudeSettings);
+    leafGeom.center();
+    leafGeom.scale(0.35, 0.35, 0.35);
+
     const leafMat = new THREE.MeshStandardMaterial({
-        color: LEAF_COLOR,
+        color: 0xffffff, // White base to let instance colors show
         emissive: LEAF_EMISSIVE,
-        emissiveIntensity: 0.8,
-        roughness: 0.4,
+        emissiveIntensity: 0.4,
+        roughness: 0.6,
         metalness: 0.1,
         transparent: true,
-        opacity: 0.9
+        opacity: 0.95
     });
 
     const actualLeaves = Math.min(MAX_LEAVES, leafPositions.length);
@@ -222,6 +230,7 @@ function initTree3D() {
     
     // Initialize leaf data
     const dummy = new THREE.Object3D();
+    const tempColor = new THREE.Color();
     for (let i = 0; i < actualLeaves; i++) {
         const pos = leafPositions[i];
         
@@ -237,6 +246,13 @@ function initTree3D() {
             baseWind: { x: 0, z: 0 }
         });
 
+        // Unique shade for each leaf
+        const hue = 0.22 + Math.random() * 0.1; // Greenish to slightly yellow/autumn
+        const saturation = 0.7 + Math.random() * 0.3;
+        const lightness = 0.3 + Math.random() * 0.4;
+        tempColor.setHSL(hue, saturation, lightness);
+        leafInstancedMesh.setColorAt(i, tempColor);
+
         dummy.position.copy(pos);
         dummy.rotation.set(leafData[i].rot.x, leafData[i].rot.y, leafData[i].rot.z);
         dummy.scale.setScalar(1.0 + (Math.random()-0.5)*0.4);
@@ -244,6 +260,7 @@ function initTree3D() {
         leafInstancedMesh.setMatrixAt(i, dummy.matrix);
     }
     
+    leafInstancedMesh.instanceColor.needsUpdate = true;
     treeGroup.add(leafInstancedMesh);
 
     // Add a dark grassy ground plane
