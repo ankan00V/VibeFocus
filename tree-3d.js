@@ -467,8 +467,20 @@ function renderTree3D(progress, totalSeconds) {
         
         let attempts = 0;
         let successfullyDropped = 0;
-        while (successfullyDropped < dropsThisFrame && attempts < 1000) {
+        while (successfullyDropped < dropsThisFrame) {
             let idx = Math.floor(Math.random() * activeLeafCount);
+            
+            // If random guessing takes too long (common when only a few leaves are left), 
+            // fallback to linear search to guarantee we find an attached leaf instantly.
+            if (attempts > 50) {
+                for (let j = 0; j < activeLeafCount; j++) {
+                    if (leafData[j].attached) {
+                        idx = j;
+                        break;
+                    }
+                }
+            }
+            
             if (leafData[idx].attached) {
                 leafData[idx].attached = false;
                 // Strong wind burst when detaching, random directions
@@ -487,6 +499,7 @@ function renderTree3D(progress, totalSeconds) {
                 detachmentQueue--;
             }
             attempts++;
+            if (detachmentQueue <= 0) break; // safety breakout
         }
     }
 
