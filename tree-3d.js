@@ -407,17 +407,18 @@ function renderTree3D(progress, totalSeconds) {
 
         if (!leaf.attached && !leaf.grounded) {
             // Falling Physics
-            leaf.vel.y -= 0.0025; // Gravity
-            
+            leaf.vel.y -= 0.006; // Stronger gravity
+
             // Wind drift - individual trajectories mixed with time
-            const windForceX = Math.sin(time * 1.5 + leaf.phase) * 0.01 + leaf.baseWind.x; 
-            const windForceZ = Math.cos(time * 1.2 + leaf.phase) * 0.01 + leaf.baseWind.z;
+            // Reduce the baseWind impact so they stay closer to the tree
+            const windForceX = Math.sin(time * 1.5 + leaf.phase) * 0.005 + leaf.baseWind.x * 0.3; 
+            const windForceZ = Math.cos(time * 1.2 + leaf.phase) * 0.005 + leaf.baseWind.z * 0.3;
             
             leaf.vel.x += windForceX;
             leaf.vel.z += windForceZ;
 
             // Air resistance
-            leaf.vel.multiplyScalar(0.95);
+            leaf.vel.multiplyScalar(0.92);
 
             leaf.pos.add(leaf.vel);
             
