@@ -7,7 +7,7 @@ let isTreeInitialized = false;
 
 let currentTargetDropped = 0;
 let detachmentQueue = 0; // Number of leaves waiting to be detached smoothly
-let lastLeafDropTime = 0;
+let nextClusterTime = 0;
 
 let activeLeafCount = 800; // Will scale dynamically based on timer duration
 let lastTotalSecondsForLeaves = 0;
@@ -408,19 +408,27 @@ function renderTree3D(progress, totalSeconds) {
     }
 
     // Process the detachment queue smoothly over frames
-    // If the queue is huge (short timer), drop multiple per frame. Otherwise, drop occasionally.
+    // We drop in natural clusters of 1 to 5 leaves, separated by time gaps.
     if (detachmentQueue > 0) {
         let dropsThisFrame = 0;
         
-        // If we're behind, speed up
-        if (detachmentQueue > 50) {
-            dropsThisFrame = Math.ceil(detachmentQueue * 0.1); // Drop 10% of queue per frame
-        } else {
-            // For smaller queues, add some randomness so they don't fall too rhythmically
-            // Drop 1 or 2 leaves occasionally
-            if (Math.random() < 0.15 || effectiveProgress >= 1.0) {
-                dropsThisFrame = Math.floor(Math.random() * 3) + 1; // 1 to 3 leaves
+        if (time > nextClusterTime || effectiveProgress >= 1.0) {
+            // Drop a natural cluster of 1 to 5 leaves (strict cap at 5)
+            dropsThisFrame = Math.floor(Math.random() * 5) + 1;
+            dropsThisFrame = Math.min(dropsThisFrame, detachmentQueue);
+            
+            // Determine the gap before the next cluster falls
+            let gap = Math.random() * 2.0 + 0.5; // Natural gap: 0.5s to 2.5s
+            
+            // If we are falling behind, shorten the gap instead of dropping 50 at once
+            if (detachmentQueue > 15) {
+                gap = 0.2; 
             }
+            if (effectiveProgress >= 1.0) {
+                gap = 0.1; // Fast flush at the end
+            }
+            
+            nextClusterTime = time + gap;
         }
         
         dropsThisFrame = Math.min(dropsThisFrame, detachmentQueue);
