@@ -7,7 +7,7 @@ let isTreeInitialized = false;
 
 let currentTargetDropped = 0;
 let detachmentQueue = 0; // Number of leaves waiting to be detached smoothly
-let lastDropTime = 0;
+let lastLeafDropTime = 0;
 
 const MAX_LEAVES = 800;
 const TREE_COLOR = 0x0a0f12; // Dark obsidian
