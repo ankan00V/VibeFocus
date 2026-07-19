@@ -5,8 +5,9 @@ let leafData = [];
 let fireflyParticles;
 let isTreeInitialized = false;
 
-let nextDropProgress = 0;
 let currentTargetDropped = 0;
+let detachmentQueue = 0; // Number of leaves waiting to be detached smoothly
+let lastDropTime = 0;
 
 const MAX_LEAVES = 800;
 const TREE_COLOR = 0x0a0f12; // Dark obsidian
@@ -211,7 +212,8 @@ function initTree3D() {
     const extrudeSettings = { depth: 0.03, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: 0.02, bevelThickness: 0.02 };
     const leafGeom = new THREE.ExtrudeGeometry(leafShape, extrudeSettings);
     leafGeom.center();
-    leafGeom.scale(0.35, 0.35, 0.35);
+    // Base scale for leaves (larger than before)
+    leafGeom.scale(0.55, 0.55, 0.55);
 
     const leafMat = new THREE.MeshStandardMaterial({
         color: 0xffffff, // White base to let instance colors show
@@ -243,7 +245,8 @@ function initTree3D() {
             attached: true,
             grounded: false,
             phase: Math.random() * Math.PI * 2,
-            baseWind: { x: 0, z: 0 }
+            baseWind: { x: 0, z: 0 },
+            scale: 0.6 + Math.random() * 0.8 // Randomize leaf sizes (small, medium, large)
         });
 
         // Unique shade for each leaf
@@ -255,7 +258,7 @@ function initTree3D() {
 
         dummy.position.copy(pos);
         dummy.rotation.set(leafData[i].rot.x, leafData[i].rot.y, leafData[i].rot.z);
-        dummy.scale.setScalar(1.0 + (Math.random()-0.5)*0.4);
+        dummy.scale.setScalar(leafData[i].scale);
         dummy.updateMatrix();
         leafInstancedMesh.setMatrixAt(i, dummy.matrix);
     }
@@ -346,33 +349,21 @@ function renderTree3D(progress, totalSeconds) {
     }
 
     // Update leaves
-    if (progress >= 1.0) {
-        // End of timer, drop ALL remaining leaves
-        currentTargetDropped = leafData.length;
-    } else if (progress >= nextDropProgress) {
-        // It's time for a new batch
-        // Dynamically scale interval based on total duration so the pacing feels right for 1m up to 120m
-        // Target an average of ~3 leaves per drop
-        let baseInterval = (totalSeconds / leafData.length) * 3;
-        // Clamp the interval between 1s and 8s to keep things visually active but not frantic
-        const intervalSeconds = Math.max(1, Math.min(baseInterval, 8)) * (0.8 + Math.random() * 0.4);
+    const idealDropped = Math.floor(progress * leafData.length);
+    
+    // Accumulate leaves to drop based on exact progress
+    if (idealDropped > currentTargetDropped) {
+        let newDrops = idealDropped - currentTargetDropped;
+        currentTargetDropped = idealDropped;
+        
+        // For very short timers (lots of leaves to drop), just add them to the queue
+        // For long timers, cluster them into random wind gusts
+        detachmentQueue += newDrops;
+    }
 
-        const progressIncrement = totalSeconds > 0 ? (intervalSeconds / totalSeconds) : 1;
-        nextDropProgress = progress + progressIncrement;
-        
-        const idealDropped = Math.floor(progress * leafData.length);
-        
-        // Calculate a random batch size, scaled around what's needed to maintain the pace
-        const expectedBatch = (intervalSeconds / totalSeconds) * leafData.length;
-        const randomFactor = 0.5 + Math.random(); // 0.5 to 1.5
-        const batch = Math.max(1, Math.round(expectedBatch * randomFactor));
-        
-        currentTargetDropped = Math.max(currentTargetDropped + batch, idealDropped);
-        
-        // cap it to save a few for the very last second
-        if (currentTargetDropped > leafData.length - 2) {
-            currentTargetDropped = leafData.length - 2;
-        }
+    // Force ALL leaves to drop at the very end
+    if (progress >= 0.999) {
+        detachmentQueue = leafData.length;
     }
 
     let currentlyDropped = 0;
@@ -380,25 +371,46 @@ function renderTree3D(progress, totalSeconds) {
         if (!leafData[i].attached) currentlyDropped++;
     }
 
-    // Detach leaves to meet currentTargetDropped
-    let attempts = 0;
-    while (currentlyDropped < currentTargetDropped && attempts < 1000) {
-        let idx = Math.floor(Math.random() * leafData.length);
-        if (leafData[idx].attached) {
-            leafData[idx].attached = false;
-            // Strong wind burst when detaching, random directions
-            const windDirX = (Math.random() - 0.5) * 0.3;
-            const windDirZ = (Math.random() - 0.5) * 0.3;
-            leafData[idx].vel.set(
-                windDirX,
-                0.05 + Math.random() * 0.05, // slight uplift
-                windDirZ
-            );
-            leafData[idx].baseWind.x = windDirX * 0.06;
-            leafData[idx].baseWind.z = windDirZ * 0.06;
-            currentlyDropped++;
+    // Process the detachment queue smoothly over frames
+    // If the queue is huge (short timer), drop multiple per frame. Otherwise, drop occasionally.
+    if (detachmentQueue > 0) {
+        let dropsThisFrame = 0;
+        
+        // If we're behind, speed up
+        if (detachmentQueue > 50) {
+            dropsThisFrame = Math.ceil(detachmentQueue * 0.1); // Drop 10% of queue per frame
+        } else {
+            // For smaller queues, add some randomness so they don't fall too rhythmically
+            // Drop 1 or 2 leaves occasionally
+            if (Math.random() < 0.15 || progress >= 0.999) {
+                dropsThisFrame = Math.floor(Math.random() * 3) + 1; // 1 to 3 leaves
+            }
         }
-        attempts++;
+        
+        dropsThisFrame = Math.min(dropsThisFrame, detachmentQueue);
+        
+        let attempts = 0;
+        let successfullyDropped = 0;
+        while (successfullyDropped < dropsThisFrame && attempts < 1000) {
+            let idx = Math.floor(Math.random() * leafData.length);
+            if (leafData[idx].attached) {
+                leafData[idx].attached = false;
+                // Strong wind burst when detaching, random directions
+                const windDirX = (Math.random() - 0.5) * 0.8;
+                const windDirZ = (Math.random() - 0.5) * 0.8;
+                leafData[idx].vel.set(
+                    windDirX,
+                    0.05 + Math.random() * 0.05, // slight uplift
+                    windDirZ
+                );
+                // Re-introduce natural base wind so they drift beautifully
+                leafData[idx].baseWind.x = windDirX * 0.15;
+                leafData[idx].baseWind.z = windDirZ * 0.15;
+                successfullyDropped++;
+                detachmentQueue--;
+            }
+            attempts++;
+        }
     }
 
     const dummy = new THREE.Object3D();
@@ -407,12 +419,12 @@ function renderTree3D(progress, totalSeconds) {
 
         if (!leaf.attached && !leaf.grounded) {
             // Falling Physics
-            leaf.vel.y -= 0.006; // Stronger gravity
+            leaf.vel.y -= 0.004; // Softer gravity for better float
 
             // Wind drift - individual trajectories mixed with time
-            // Reduce the baseWind impact so they stay closer to the tree
-            const windForceX = Math.sin(time * 1.5 + leaf.phase) * 0.005 + leaf.baseWind.x * 0.3; 
-            const windForceZ = Math.cos(time * 1.2 + leaf.phase) * 0.005 + leaf.baseWind.z * 0.3;
+            // Re-introduced wind effect so they don't just drop straight down
+            const windForceX = Math.sin(time * 1.5 + leaf.phase) * 0.008 + leaf.baseWind.x; 
+            const windForceZ = Math.cos(time * 1.2 + leaf.phase) * 0.008 + leaf.baseWind.z;
             
             leaf.vel.x += windForceX;
             leaf.vel.z += windForceZ;
@@ -444,9 +456,9 @@ function renderTree3D(progress, totalSeconds) {
         dummy.position.copy(leaf.pos);
         dummy.rotation.set(leaf.rot.x, leaf.rot.y, leaf.rot.z);
         // Base scale for leaves
-        let scale = 1.0;
+        let scale = leaf.scale;
         // Make grounded leaves fade/shrink slightly to avoid z-fighting clutter
-        if (leaf.grounded) scale = 0.8;
+        if (leaf.grounded) scale *= 0.8;
         dummy.scale.setScalar(scale);
         dummy.updateMatrix();
         leafInstancedMesh.setMatrixAt(i, dummy.matrix);
