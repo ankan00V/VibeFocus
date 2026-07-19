@@ -266,10 +266,27 @@ function initTree3D() {
             scale: (1.0 + Math.random() * 1.2) * sizeMultiplier
         });
 
-        // Unique shade for each leaf
-        const hue = 0.22 + Math.random() * 0.1; // Greenish to slightly yellow/autumn
-        const saturation = 0.7 + Math.random() * 0.3;
-        const lightness = 0.3 + Math.random() * 0.4;
+        // Natural leaf colors: lush green, dark mature green, old yellow
+        let hue, saturation, lightness;
+        const randColor = Math.random();
+        
+        if (randColor < 0.6) {
+            // Lush mid-green (majority)
+            hue = 0.25 + Math.random() * 0.05; // 0.25 to 0.30
+            saturation = 0.6 + Math.random() * 0.3;
+            lightness = 0.3 + Math.random() * 0.2;
+        } else if (randColor < 0.85) {
+            // Dark mature green
+            hue = 0.30 + Math.random() * 0.05; // 0.30 to 0.35
+            saturation = 0.4 + Math.random() * 0.3;
+            lightness = 0.15 + Math.random() * 0.15;
+        } else {
+            // Old yellow / slightly autumn
+            hue = 0.12 + Math.random() * 0.08; // 0.12 to 0.20
+            saturation = 0.7 + Math.random() * 0.3;
+            lightness = 0.4 + Math.random() * 0.2;
+        }
+        
         tempColor.setHSL(hue, saturation, lightness);
         leafInstancedMesh.setColorAt(i, tempColor);
 
