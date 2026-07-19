@@ -396,8 +396,9 @@ function renderTree3D(progress, totalSeconds) {
             if (leafData[idx].attached) {
                 leafData[idx].attached = false;
                 // Strong wind burst when detaching, random directions
-                const windDirX = (Math.random() - 0.5) * 0.8;
-                const windDirZ = (Math.random() - 0.5) * 0.8;
+                // Give Z-axis a boost so it moves front/back more noticeably
+                const windDirX = (Math.random() - 0.5) * 1.2;
+                const windDirZ = (Math.random() - 0.5) * 1.5;
                 leafData[idx].vel.set(
                     windDirX,
                     0.05 + Math.random() * 0.05, // slight uplift
@@ -423,17 +424,46 @@ function renderTree3D(progress, totalSeconds) {
 
             // Wind drift - individual trajectories mixed with time
             // Re-introduced wind effect so they don't just drop straight down
-            const windForceX = Math.sin(time * 1.5 + leaf.phase) * 0.008 + leaf.baseWind.x; 
-            const windForceZ = Math.cos(time * 1.2 + leaf.phase) * 0.008 + leaf.baseWind.z;
+            const windForceX = Math.sin(time * 1.5 + leaf.phase) * 0.01 + leaf.baseWind.x; 
+            const windForceZ = Math.cos(time * 1.2 + leaf.phase) * 0.01 + leaf.baseWind.z;
             
             leaf.vel.x += windForceX;
             leaf.vel.z += windForceZ;
 
-            // Air resistance
-            leaf.vel.multiplyScalar(0.92);
-
+            // Damping (air resistance)
+            leaf.vel.x *= 0.92;
+            leaf.vel.y *= 0.98;
+            leaf.vel.z *= 0.92;
+            
             leaf.pos.add(leaf.vel);
             
+            // --- BOUNDARY LOGIC ---
+            // Keep leaves within screen bounds. Bounce them if they hit the invisible walls.
+            const BOUND_X = 35;
+            const BOUND_Z_FRONT = 45; // Camera is at z=65
+            const BOUND_Z_BACK = -25;
+            
+            if (leaf.pos.x > BOUND_X) {
+                leaf.pos.x = BOUND_X;
+                leaf.vel.x *= -0.5;
+                leaf.baseWind.x *= -1; // Reverse wind direction
+            } else if (leaf.pos.x < -BOUND_X) {
+                leaf.pos.x = -BOUND_X;
+                leaf.vel.x *= -0.5;
+                leaf.baseWind.x *= -1;
+            }
+            
+            if (leaf.pos.z > BOUND_Z_FRONT) {
+                leaf.pos.z = BOUND_Z_FRONT;
+                leaf.vel.z *= -0.5;
+                leaf.baseWind.z *= -1;
+            } else if (leaf.pos.z < BOUND_Z_BACK) {
+                leaf.pos.z = BOUND_Z_BACK;
+                leaf.vel.z *= -0.5;
+                leaf.baseWind.z *= -1;
+            }
+            // ----------------------
+
             // Rotation
             leaf.rot.add(leaf.rotVel);
 
