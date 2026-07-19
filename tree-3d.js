@@ -9,10 +9,10 @@ let currentTargetDropped = 0;
 let detachmentQueue = 0; // Number of leaves waiting to be detached smoothly
 let nextClusterTime = 0;
 
-let activeLeafCount = 1000; // Will scale dynamically based on timer duration
+let activeLeafCount = 4000; // Will scale dynamically based on timer duration
 let lastTotalSecondsForLeaves = 0;
 
-const MAX_LEAVES = 1000;
+const MAX_LEAVES = 4000;
 const TREE_COLOR = 0x0a0f12; // Dark obsidian
 const LEAF_COLOR = 0xa8d870; // Glowing ethereal green
 const LEAF_EMISSIVE = 0x55aa33;
@@ -245,6 +245,14 @@ function initTree3D() {
     for (let i = 0; i < actualLeaves; i++) {
         const pos = leafPositions[i];
         
+        // For short timers, we use the first 100-200 leaves. We want them HUGE.
+        // For long timers (up to 120 mins), we use all 4000 leaves. We make the extra ones progressively smaller
+        // so the tree doesn't turn into a solid green blob.
+        let sizeMultiplier = 1.0;
+        if (i > 150) {
+            sizeMultiplier = Math.max(0.4, 1.0 - (i / MAX_LEAVES) * 0.8);
+        }
+
         leafData.push({
             startPos: pos.clone(),
             pos: pos.clone(),
@@ -255,7 +263,7 @@ function initTree3D() {
             grounded: false,
             phase: Math.random() * Math.PI * 2,
             baseWind: { x: 0, z: 0 },
-            scale: 1.0 + Math.random() * 1.2 // Randomize leaf sizes (huge overall)
+            scale: (1.0 + Math.random() * 1.2) * sizeMultiplier
         });
 
         // Unique shade for each leaf
@@ -361,9 +369,10 @@ function renderTree3D(progress, totalSeconds) {
         lastTotalSecondsForLeaves = totalSeconds;
         
         // To guarantee a 2.5 - 3.0 second wait between drops while also dropping 100% of leaves,
-        // we can mathematically only allocate a specific amount of leaves per second.
-        // E.g. 1 min = ~72 leaves. 120 min = 1000 leaves (maxed).
-        const targetLeaves = Math.floor(totalSeconds * 1.2);
+        // and NEVER waiting more than 3.0 seconds even on a 120-minute timer:
+        // We MUST allocate enough leaves so that at least 1 leaf can fall every 2.75 seconds.
+        // E.g. 1 min = 90 leaves (4 leaves every 2.75s). 120 min = 3660 leaves (1.3 leaves every 2.75s).
+        const targetLeaves = Math.floor(60 + totalSeconds * 0.5);
         activeLeafCount = Math.max(10, Math.min(leafData.length, targetLeaves));
         
         leafInstancedMesh.count = activeLeafCount;
