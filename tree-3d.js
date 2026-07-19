@@ -8,7 +8,7 @@ let isTreeInitialized = false;
 let nextDropProgress = 0;
 let currentTargetDropped = 0;
 
-const MAX_LEAVES = 1500;
+const MAX_LEAVES = 800;
 const TREE_COLOR = 0x0a0f12; // Dark obsidian
 const LEAF_COLOR = 0xa8d870; // Glowing ethereal green
 const LEAF_EMISSIVE = 0x55aa33;
@@ -301,12 +301,22 @@ function renderTree3D(progress, totalSeconds) {
         currentTargetDropped = leafData.length;
     } else if (progress >= nextDropProgress) {
         // It's time for a new batch
-        const intervalSeconds = 2 + Math.random() * 2; // 2 to 4 seconds
+        // Dynamically scale interval based on total duration so the pacing feels right for 1m up to 120m
+        // Target an average of ~3 leaves per drop
+        let baseInterval = (totalSeconds / leafData.length) * 3;
+        // Clamp the interval between 1s and 8s to keep things visually active but not frantic
+        const intervalSeconds = Math.max(1, Math.min(baseInterval, 8)) * (0.8 + Math.random() * 0.4);
+
         const progressIncrement = totalSeconds > 0 ? (intervalSeconds / totalSeconds) : 1;
         nextDropProgress = progress + progressIncrement;
         
         const idealDropped = Math.floor(progress * leafData.length);
-        const batch = Math.floor(Math.random() * 4) + 1; // 1 to 4 leaves
+        
+        // Calculate a random batch size, scaled around what's needed to maintain the pace
+        const expectedBatch = (intervalSeconds / totalSeconds) * leafData.length;
+        const randomFactor = 0.5 + Math.random(); // 0.5 to 1.5
+        const batch = Math.max(1, Math.round(expectedBatch * randomFactor));
+        
         currentTargetDropped = Math.max(currentTargetDropped + batch, idealDropped);
         
         // cap it to save a few for the very last second
