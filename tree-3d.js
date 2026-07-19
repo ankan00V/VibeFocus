@@ -509,7 +509,7 @@ function renderTree3D(progress, totalSeconds) {
 
         if (!leaf.attached && !leaf.grounded) {
             // Falling Physics
-            leaf.vel.y -= 0.004; // Softer gravity for better float
+            leaf.vel.y -= 0.012; // Stronger gravity for a much faster, snappier fall
 
             // Wind drift - individual trajectories mixed with time
             // Re-introduced wind effect so they don't just drop straight down
@@ -520,9 +520,9 @@ function renderTree3D(progress, totalSeconds) {
             leaf.vel.z += windForceZ;
 
             // Damping (air resistance)
-            leaf.vel.x *= 0.92;
-            leaf.vel.y *= 0.98;
-            leaf.vel.z *= 0.92;
+            leaf.vel.x *= 0.90; // higher horizontal drag to prevent them shooting off
+            leaf.vel.y *= 0.96; // Less Y drag = faster fall
+            leaf.vel.z *= 0.90;
             
             leaf.pos.add(leaf.vel);
             
