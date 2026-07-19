@@ -425,8 +425,8 @@ function renderTree3D(progress, totalSeconds) {
             }
             dropsThisFrame = Math.min(dropsThisFrame, detachmentQueue);
             
-            // The strict user requirement: at least 2.5 - 3 seconds wait!
-            let gap = Math.random() * 1.0 + 2.5; // Natural gap: 2.5s to 3.5s
+            // The strict user requirement: randomly between 2.5 - 3 seconds wait!
+            let gap = Math.random() * 0.5 + 2.5; // Natural gap: 2.5s to 3.0s
             
             // To guarantee the tree is empty by the last second, we only break the rule at the very end.
             if (effectiveProgress >= 0.95) {
