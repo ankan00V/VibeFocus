@@ -21,7 +21,7 @@ function initTree3D() {
     const canvas = document.getElementById('tree-canvas');
     if (!canvas) return;
 
-    treeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true, powerPreference: "high-performance" });
+    treeRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true, preserveDrawingBuffer: true, powerPreference: "high-performance" });
     treeRenderer.setSize(canvas.clientWidth, canvas.clientHeight);
     treeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     treeRenderer.shadowMap.enabled = true;

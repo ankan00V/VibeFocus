@@ -7,7 +7,7 @@ function initWaterBowl3D() {
     const canvas = document.getElementById('water-bowl-canvas');
     if (!canvas) return;
     
-    bowlRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+    bowlRenderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
     bowlRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     
     const container = canvas.parentElement;
