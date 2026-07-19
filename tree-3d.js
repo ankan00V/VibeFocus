@@ -5,6 +5,9 @@ let leafData = [];
 let fireflyParticles;
 let isTreeInitialized = false;
 
+let nextDropProgress = 0;
+let currentTargetDropped = 0;
+
 const MAX_LEAVES = 1500;
 const TREE_COLOR = 0x0a0f12; // Dark obsidian
 const LEAF_COLOR = 0xa8d870; // Glowing ethereal green
@@ -25,9 +28,9 @@ function initTree3D() {
     // Camera
     const aspect = canvas.clientWidth / canvas.clientHeight;
     treeCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 100);
-    // Position camera to see the tree and ground
-    treeCamera.position.set(0, 15, 40);
-    treeCamera.lookAt(0, 8, 0);
+    // Position camera to see the full tree and ground
+    treeCamera.position.set(0, 20, 65);
+    treeCamera.lookAt(0, 12, 0);
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -259,6 +262,8 @@ function initTree3D() {
 
 function resetTree3D() {
     if (!isTreeInitialized) return;
+    currentTargetDropped = 0;
+    nextDropProgress = 0;
     for (let i = 0; i < leafData.length; i++) {
         const leaf = leafData[i];
         leaf.attached = true;
@@ -291,37 +296,64 @@ function renderTree3D(progress, totalSeconds) {
     }
 
     // Update leaves
-    const targetDropped = Math.floor(progress * leafData.length);
+    if (progress >= 1.0) {
+        // End of timer, drop ALL remaining leaves
+        currentTargetDropped = leafData.length;
+    } else if (progress >= nextDropProgress) {
+        // It's time for a new batch
+        const intervalSeconds = 2 + Math.random() * 2; // 2 to 4 seconds
+        const progressIncrement = totalSeconds > 0 ? (intervalSeconds / totalSeconds) : 1;
+        nextDropProgress = progress + progressIncrement;
+        
+        const idealDropped = Math.floor(progress * leafData.length);
+        const batch = Math.floor(Math.random() * 4) + 1; // 1 to 4 leaves
+        currentTargetDropped = Math.max(currentTargetDropped + batch, idealDropped);
+        
+        // cap it to save a few for the very last second
+        if (currentTargetDropped > leafData.length - 2) {
+            currentTargetDropped = leafData.length - 2;
+        }
+    }
+
     let currentlyDropped = 0;
+    for (let i = 0; i < leafData.length; i++) {
+        if (!leafData[i].attached) currentlyDropped++;
+    }
+
+    // Detach leaves to meet currentTargetDropped
+    let attempts = 0;
+    while (currentlyDropped < currentTargetDropped && attempts < 1000) {
+        let idx = Math.floor(Math.random() * leafData.length);
+        if (leafData[idx].attached) {
+            leafData[idx].attached = false;
+            // Strong wind burst when detaching
+            leafData[idx].vel.set(
+                (Math.random() - 0.2) * 0.2, // wind blowing right mostly
+                0.05 + Math.random() * 0.05, // slight uplift
+                (Math.random() - 0.5) * 0.2
+            );
+            currentlyDropped++;
+        }
+        attempts++;
+    }
 
     const dummy = new THREE.Object3D();
     for (let i = 0; i < leafData.length; i++) {
         const leaf = leafData[i];
-        
-        if (!leaf.attached) currentlyDropped++;
-
-        // Detach leaves smoothly over time based on progress
-        if (leaf.attached && currentlyDropped < targetDropped) {
-            // Random chance to detach to avoid clumps
-            if (Math.random() < 0.1) {
-                leaf.attached = false;
-                currentlyDropped++;
-                // Initial wind burst
-                leaf.vel.set((Math.random()-0.5)*0.1, 0, (Math.random()-0.5)*0.1);
-            }
-        }
 
         if (!leaf.attached && !leaf.grounded) {
             // Falling Physics
-            leaf.vel.y -= 0.0015; // Gravity
+            leaf.vel.y -= 0.0025; // Gravity
             
-            // Wind drift
-            const wind = Math.sin(time * 2 + leaf.phase) * 0.01;
-            leaf.vel.x += wind;
-            leaf.vel.z += Math.cos(time * 1.5 + leaf.phase) * 0.01;
+            // Wind drift - blown out by the wind
+            const windForceX = Math.sin(time * 1.5 + leaf.phase) * 0.01 + 0.008; 
+            const windForceZ = Math.cos(time * 1.2 + leaf.phase) * 0.01;
+            
+            leaf.vel.x += windForceX;
+            leaf.vel.z += windForceZ;
 
             // Air resistance
-            leaf.vel.multiplyScalar(0.98);
+            leaf.vel.multiplyScalar(0.95);
 
             leaf.pos.add(leaf.vel);
             
