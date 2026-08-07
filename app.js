@@ -28,6 +28,22 @@
   }
 })();
 
+/* ── PiP Proxy (Fixes Safari WebGL captureStream bugs) ── */
+const pipProxyCanvas = document.createElement('canvas');
+pipProxyCanvas.id = 'pip-proxy-canvas';
+pipProxyCanvas.width = 1280;
+pipProxyCanvas.height = 720;
+// Make it part of the render tree but invisible so Safari captureStream works
+pipProxyCanvas.style.position = 'fixed';
+pipProxyCanvas.style.top = '-9999px';
+pipProxyCanvas.style.left = '-9999px';
+pipProxyCanvas.style.pointerEvents = 'none';
+const pipProxyCtx = pipProxyCanvas.getContext('2d', { alpha: false });
+pipProxyCtx.fillStyle = '#000';
+pipProxyCtx.fillRect(0, 0, 1280, 720);
+// Some browsers require the canvas in the DOM for captureStream
+document.addEventListener('DOMContentLoaded', () => document.body.appendChild(pipProxyCanvas));
+
 /* ── Mobile detection & adaptive quality ──────────────── */
 const IS_MOBILE = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
                || window.innerWidth <= 768;
@@ -456,6 +472,8 @@ document.addEventListener('touchstart', forcePlayAllHeroVideos, { once: true });
 /* ══════════════════════════════════════════════════════════
    Screen Transition
 ══════════════════════════════════════════════════════════ */
+let screenTransitionTimeout = null;
+
 function goTo(name, zoomExit = false) {
   // Pause preview loop when leaving vibe screen, resume when returning
   if (name !== 'vibe' && previewRaf) {
@@ -467,13 +485,19 @@ function goTo(name, zoomExit = false) {
     previewRaf = requestAnimationFrame(animatePreviews);
   }
 
+  if (screenTransitionTimeout) {
+    clearTimeout(screenTransitionTimeout);
+    screenTransitionTimeout = null;
+  }
+
   return new Promise(resolve => {
-    const current = Object.values(screens).find(s => s.classList.contains('active'));
+    const current = Object.values(screens).find(s => s && s.classList.contains('active'));
 
     // Fade overlay to black
     fadeOverlay.classList.add('show');
 
-    setTimeout(() => {
+    screenTransitionTimeout = setTimeout(() => {
+      screenTransitionTimeout = null;
       if (current) {
         current.classList.remove('active');
         if (zoomExit) {
@@ -659,6 +683,19 @@ btnStart.addEventListener('click', () => {
   
   // Important for iOS/Safari: init/resume AudioContext directly in click handler
   unlockAudioCtx();
+  
+  // Important for Safari PiP: Set up and play the proxy stream directly in the click handler
+  // BEFORE any async/await boundaries, so the user gesture token is preserved.
+  if (pipVideo && typeof pipProxyCanvas.captureStream === 'function') {
+    try {
+      if (!pipVideo.srcObject) {
+        pipVideo.srcObject = pipProxyCanvas.captureStream(30);
+      }
+      pipVideo.play().catch(e => console.warn("pipVideo play failed:", e));
+    } catch(err) {
+      console.warn("captureStream failed", err);
+    }
+  }
 
   // GA4: track session start
   if (typeof gtag === 'function') {
@@ -676,6 +713,8 @@ async function launchFocus() {
   groundPile.length = 0;
   if (typeof WATER !== 'undefined') { WATER.initd = false; WATER.drops = []; WATER.ripples = []; WATER.splash = []; }
   if (typeof CANDLE !== 'undefined') { CANDLE.initd = false; CANDLE.smoke = []; CANDLE.embers = []; }
+  if (typeof resetCandle3D === 'function') resetCandle3D();
+  if (typeof resetTree3D === 'function') resetTree3D();
   if (typeof drawTree === 'function') {
     drawTree._motes    = null;
     drawTree._lastGust = -1;   // reset gust timer so first gust fires at t=50s
@@ -684,22 +723,6 @@ async function launchFocus() {
   await goTo('focus');
   resizeFocusCanvas();
   tryFullscreen();
-  
-  // Set up the PiP stream ahead of time so metadata is ready
-  if (pipVideo) {
-    let targetCanvas = focusCanvas;
-    if (state.vibe === 'ice') targetCanvas = document.getElementById('water-bowl-canvas');
-    if (state.vibe === 'tree') targetCanvas = document.getElementById('tree-canvas');
-    
-    if (targetCanvas && typeof targetCanvas.captureStream === 'function') {
-      try {
-        pipVideo.srcObject = targetCanvas.captureStream(30);
-        pipVideo.play().catch(() => {});
-      } catch(err) {
-        console.warn("captureStream failed", err);
-      }
-    }
-  }
 
   if (state.soundOn) {
     startAmbient(state.vibe);
@@ -744,7 +767,10 @@ function tickFocus(now) {
   hudFill.setAttribute('aria-valuenow', Math.round(prog * 100));
 
   // Draw timer directly on canvas if PiP is active
-  if (document.pictureInPictureElement === pipVideo) {
+  const isPipActive = document.pictureInPictureElement === pipVideo || 
+                     (pipVideo.webkitPresentationMode === "picture-in-picture");
+                     
+  if (isPipActive) {
     focusCtx.save();
     focusCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     focusCtx.beginPath();
@@ -757,6 +783,47 @@ function tickFocus(now) {
     focusCtx.textBaseline = 'middle';
     focusCtx.fillText(timeStr, (focusCanvas.width / RENDER_DPR) / 2, (focusCanvas.height / RENDER_DPR) - 40);
     focusCtx.restore();
+    
+    // Copy the active WebGL canvas to our 2D proxy to fix Safari PiP blank stream bugs
+    let activeCanvas = focusCanvas;
+    if (state.vibe === 'ice') activeCanvas = document.getElementById('water-bowl-canvas');
+    if (state.vibe === 'tree') activeCanvas = document.getElementById('tree-canvas');
+    if (state.vibe === 'candle') activeCanvas = document.getElementById('candle-canvas');
+    
+    if (activeCanvas && activeCanvas.width > 0 && activeCanvas.height > 0) {
+      try {
+        pipProxyCtx.fillStyle = '#000';
+        pipProxyCtx.fillRect(0, 0, pipProxyCanvas.width, pipProxyCanvas.height);
+        
+        // Calculate aspect-ratio-preserving dimensions
+        const proxyAspect = pipProxyCanvas.width / pipProxyCanvas.height;
+        const activeAspect = activeCanvas.width / activeCanvas.height;
+        
+        let drawW = pipProxyCanvas.width;
+        let drawH = pipProxyCanvas.height;
+        let drawX = 0;
+        let drawY = 0;
+        
+        if (activeAspect > proxyAspect) {
+          // Source is wider
+          drawH = pipProxyCanvas.width / activeAspect;
+          drawY = (pipProxyCanvas.height - drawH) / 2;
+        } else {
+          // Source is taller
+          drawW = pipProxyCanvas.height * activeAspect;
+          drawX = (pipProxyCanvas.width - drawW) / 2;
+        }
+        
+        pipProxyCtx.drawImage(activeCanvas, 0, 0, activeCanvas.width, activeCanvas.height, drawX, drawY, drawW, drawH);
+        
+        // If using a 3D canvas, draw the focusCanvas (which has the timer text) on top
+        if (activeCanvas !== focusCanvas && focusCanvas.width > 0 && focusCanvas.height > 0) {
+          pipProxyCtx.drawImage(focusCanvas, 0, 0, focusCanvas.width, focusCanvas.height, drawX, drawY, drawW, drawH);
+        }
+      } catch (err) {
+        console.warn('PiP proxy canvas draw failed:', err);
+      }
+    }
   }
 
   if (elapsed >= state.totalSeconds) {
@@ -779,6 +846,8 @@ function onSessionComplete() {
   exitFullscreen();
   if (document.pictureInPictureElement) {
     document.exitPictureInPicture().catch(e => console.warn('Failed to exit PiP', e));
+  } else if (typeof pipVideo !== 'undefined' && pipVideo && pipVideo.webkitPresentationMode === "picture-in-picture") {
+    pipVideo.webkitSetPresentationMode("inline");
   }
 
   // GA4: track session completion
@@ -825,6 +894,8 @@ function stopSession() {
   exitFullscreen();
   if (document.pictureInPictureElement) {
     document.exitPictureInPicture().catch(e => console.warn('Failed to exit PiP', e));
+  } else if (typeof pipVideo !== 'undefined' && pipVideo && pipVideo.webkitPresentationMode === "picture-in-picture") {
+    pipVideo.webkitSetPresentationMode("inline");
   }
 }
 
@@ -976,6 +1047,7 @@ function drawVibe(ctx, W, H, progress, vibe, time, totalSeconds = 60) {
   
   const waterBowlCanvas = document.getElementById('water-bowl-canvas');
   const treeCanvas = document.getElementById('tree-canvas');
+  const candleCanvas = document.getElementById('candle-canvas');
   const isMainCanvas = ctx.canvas.id === 'focus-canvas' || ctx.canvas.id === 'complete-canvas';
   
   if (isMainCanvas) {
@@ -992,6 +1064,9 @@ function drawVibe(ctx, W, H, progress, vibe, time, totalSeconds = 60) {
                   waterBowlCanvas.style.width = '100%';
                   waterBowlCanvas.style.height = '100%';
                   waterBowlCanvas.style.zIndex = '-1';
+                  if (typeof resizeWaterBowl3D === 'function') {
+                      resizeWaterBowl3D(waterBowlCanvas.clientWidth, waterBowlCanvas.clientHeight);
+                  }
               }
               
               if (typeof renderWaterBowl3D !== 'undefined') {
@@ -1016,6 +1091,9 @@ function drawVibe(ctx, W, H, progress, vibe, time, totalSeconds = 60) {
                   treeCanvas.style.width = '100%';
                   treeCanvas.style.height = '100%';
                   treeCanvas.style.zIndex = '-1';
+                  if (typeof resizeTree3D === 'function') {
+                      resizeTree3D(treeCanvas.clientWidth, treeCanvas.clientHeight);
+                  }
               }
               
               if (typeof initTree3D === 'function' && typeof isTreeInitialized !== 'undefined' && !isTreeInitialized) {
@@ -1030,13 +1108,44 @@ function drawVibe(ctx, W, H, progress, vibe, time, totalSeconds = 60) {
           }
       }
 
+      if (candleCanvas) {
+          if (vibe === 'candle') {
+              ctx.canvas.style.opacity = '0';
+              candleCanvas.style.display = 'block';
+              
+              if (candleCanvas.parentElement !== ctx.canvas.parentElement) {
+                  ctx.canvas.parentElement.insertBefore(candleCanvas, ctx.canvas);
+                  candleCanvas.style.position = 'absolute';
+                  candleCanvas.style.top = '0';
+                  candleCanvas.style.left = '0';
+                  candleCanvas.style.width = '100%';
+                  candleCanvas.style.height = '100%';
+                  candleCanvas.style.zIndex = '-1';
+                  if (typeof resizeCandle3D === 'function') {
+                      resizeCandle3D(candleCanvas.clientWidth, candleCanvas.clientHeight);
+                  }
+              }
+              
+              if (typeof initCandle3D === 'function' && typeof isCandleInitialized !== 'undefined' && !isCandleInitialized) {
+                  initCandle3D(candleCanvas);
+              }
+              
+              if (typeof renderCandle3D !== 'undefined') {
+                  const isCeremony = ctx.canvas.id === 'complete-canvas';
+                  renderCandle3D(progress, time, isCeremony, totalSeconds);
+              }
+          } else {
+              candleCanvas.style.display = 'none';
+          }
+      }
+
       // Restore 2D canvas opacity if no 3D canvas is active
-      if (vibe !== 'ice' && vibe !== 'tree') {
+      if (vibe !== 'ice' && vibe !== 'tree' && vibe !== 'candle') {
           ctx.canvas.style.opacity = '1';
       }
 
       // Skip 2D rendering for the main canvas when 3D is active
-      if (vibe === 'ice' || vibe === 'tree') {
+      if (vibe === 'ice' || vibe === 'tree' || vibe === 'candle') {
           return;
       }
   }
@@ -2558,6 +2667,13 @@ let previewLeavesInit = false;
 function animatePreviews(ts) {
   // Always schedule next frame first so cancelAnimationFrame in goTo works
   previewRaf = requestAnimationFrame(animatePreviews);
+
+  // Skip preview drawing if current screen is not vibe or duration preview screen
+  if (screens && screens.vibe && screens.duration) {
+    if (!screens.vibe.classList.contains('active') && !screens.duration.classList.contains('active')) {
+      return;
+    }
+  }
 
   // Throttle: skip this frame if not enough time passed
   if (ts - previewLastFrame < PREVIEW_INTERVAL) return;

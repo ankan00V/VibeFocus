@@ -152,3 +152,70 @@ Do not alter any CSS properties outside of the `@media (max-width: 768px)` block
 - [ ] A programmatic verification step confirms that `@media (max-width: 768px)` blocks contain specific overrides for `.split-layout`, `.hero-content`, `.complete-inner`, and primary UI buttons.
 - [ ] No CSS properties outside of the `@media` queries have been modified, added, or deleted (verified by comparing git diff or file structure outside the media query blocks).
 - [ ] The `styles.css` file parses successfully without any CSS syntax errors.
+
+## 2026-07-25T08:08:34Z
+
+# Teamwork Project Prompt — Draft
+
+> Status: Launched
+> Goal: Craft prompt → get user approval → delegate to teamwork_preview
+
+Upgrade the visual aesthetics and animation of the "candle" component to professional-grade, high-end visuals, matching the quality of the newly upgraded water bowl and tree components.
+
+Working directory: /Users/ankanghosh/Desktop/projects/timer timer
+
+Integrity mode: development
+
+## Requirements
+
+### R1. Upgrade to WebGL (Three.js)
+The candle visual must be completely rewritten from a 2D canvas implementation to a true 3D WebGL implementation using Three.js, matching the high-end technical foundation of the tree and water bowl components.
+
+### R2. High-End Visual Aesthetics
+The new candle must feature professional-grade visual elements. This includes a dynamic, organic flame (e.g., using custom shaders or advanced sprites), a 3D wax body with realistic shading (such as subsurface scattering approximations or rich materials), dynamic lighting that illuminates the surrounding scene, and realistic melting effects.
+
+### R3. Seamless Integration & Timer Synchronization
+The WebGL candle must integrate flawlessly with the existing timer architecture (e.g., `startFocus()`, `stopSession()`, pause/resume). The candle must physically melt down or dynamically change in real-time proportionally to the remaining timer duration.
+
+## Acceptance Criteria
+
+### Technical Foundation
+- [ ] The candle rendering utilizes Three.js constructs (Scene, Camera, WebGLRenderer, Mesh, ShaderMaterial) rather than 2D Canvas context rendering.
+- [ ] A dedicated Three.js animation loop is used, correctly integrated into the app's global requestAnimationFrame or a self-contained loop that responds to app state.
+
+### Visual Quality
+- [ ] A dynamic lighting source (e.g., PointLight) is attached to the flame, casting realistic light/glow.
+- [ ] The flame animation uses advanced techniques (custom GLSL shaders, particle systems, or complex animated geometry) rather than basic flat shapes.
+- [ ] The candle body exhibits realistic texture or shading (not just a flat color).
+
+### Functional Integration
+- [ ] As the timer counts down, the height or visual state of the candle's wax body decreases smoothly to represent melting.
+- [ ] The new candle component respects the app's start, pause, and stop/complete events without throwing errors or causing infinite loops.
+
+## 2026-08-07T11:14:02Z
+
+# Teamwork Project Prompt
+
+Implement an automated, naturally emerging WebGL flower blooming effect on the ground of the tree timer as the countdown progresses, adapting a provided click-based shader into an autonomous system where flowers emerge randomly and do not disappear.
+
+Working directory: /Users/ankanghosh/Desktop/projects/timer timer
+Integrity mode: benchmark
+
+## Requirements
+
+### R1. Automated Flower Blooming
+Adapt the provided WebGL shader code to automatically spawn flowers on the ground of the tree scene at intervals proportional to the total timer duration (evenly spread across the session), without any user interaction. 
+
+### R2. 3D Sprite Integration
+Render the flowers as 2D sprites/billboards placed on the 3D ground plane in `tree-3d.js` so they match the perspective of the existing 3D scene and falling leaves.
+
+### R3. Persistent Flowers
+Once a flower has fully bloomed, it must remain on the ground permanently until the timer is reset, rather than fading away. The flower emergence should feel effortless and natural, blending smoothly with the existing tree timer's aesthetics.
+
+## Acceptance Criteria
+
+### Functionality Verification
+- [ ] Code check: The flower spawning logic is tied to the timer's progress (e.g., in the render loop or interval based on remaining time).
+- [ ] Code check: Flowers are implemented as `THREE.Sprite` or similar planar meshes with the provided shader material attached.
+- [ ] Code check: Flowers remain visible in the scene graph and are not removed or faded out after their bloom animation completes.
+- [ ] Integration check: `tree-3d.js` compiles and runs without WebGL or JavaScript console errors.
