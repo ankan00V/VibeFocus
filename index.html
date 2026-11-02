@@ -122,7 +122,8 @@
       <div class="lp-scene" aria-hidden="true">
         <div class="lp-scene-box">
           <img class="lp-plate" src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/3ca5d10d-ea2f-4907-876f-33bde169469e.jpg" alt="" width="2160" height="1920" decoding="async" fetchpriority="high" />
-          <video class="lp-video" data-src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/d2cb5bef-f92b-4e91-ae93-8dc6555e56ac.mp4" muted loop playsinline preload="none" disablepictureinpicture></video>
+          <!-- Same plate, animated: re-encoded from the 960px source (padding cropped, cleaned, upscaled to 1920; 1280 for phones) -->
+          <video class="lp-video" data-src="media/hillside-loop.mp4" data-src-small="media/hillside-loop-1280.mp4" muted loop playsinline preload="none" disablepictureinpicture></video>
         </div>
       </div>
 
@@ -161,16 +162,13 @@
       <!-- Vibes row -->
       <section class="lp-vibes" aria-labelledby="lp-vibes-title">
         <h2 id="lp-vibes-title" class="lp-vibes-title lp-enter" data-enter="rise">Pick your vibe</h2>
-        <button type="button" class="lp-vibes-link lp-enter js-open-vibes" data-enter="rise">
-          browse all vibes <svg class="lp-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <ul class="lp-cards" role="list">
+        <ul class="lp-cards" id="lp-cards" role="list">
           <li>
-            <button type="button" class="lp-card lp-enter" data-enter="rise" data-vid="2" aria-label="Start a Tree session — leaves fall as minutes pass">
-              <span class="lp-card-art"><img src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/cd2d844f-ae3f-4fa9-8067-b077530b6e71.webp" alt="" loading="lazy" decoding="async" /></span>
+            <button type="button" class="lp-card lp-enter" data-enter="rise" data-vid="0" aria-label="Start a Candle session — burns with quiet purpose">
+              <span class="lp-card-art lp-card-art--valley"><img src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/3ca5d10d-ea2f-4907-876f-33bde169469e.jpg" alt="" loading="lazy" decoding="async" /></span>
               <span class="lp-card-foot">
                 <svg class="lp-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 4.6c-1-.6-2.2.1-2.2 1.3v12.2c0 1.2 1.2 1.9 2.2 1.3l10.1-6.1c1-.6 1-2 0-2.6Z" fill="currentColor"/></svg>
-                <span class="lp-card-text"><strong>Tree</strong><span>Leaves fall as minutes pass</span></span>
+                <span class="lp-card-text"><strong>Candle</strong><span>Burns with quiet purpose</span></span>
               </span>
             </button>
           </li>
@@ -180,6 +178,15 @@
               <span class="lp-card-foot">
                 <svg class="lp-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 4.6c-1-.6-2.2.1-2.2 1.3v12.2c0 1.2 1.2 1.9 2.2 1.3l10.1-6.1c1-.6 1-2 0-2.6Z" fill="currentColor"/></svg>
                 <span class="lp-card-text"><strong>Water Bowl</strong><span>Fills drop by drop with time</span></span>
+              </span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="lp-card lp-enter" data-enter="rise" data-vid="2" aria-label="Start a Tree session — leaves fall as minutes pass">
+              <span class="lp-card-art"><img src="https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/cd2d844f-ae3f-4fa9-8067-b077530b6e71.webp" alt="" loading="lazy" decoding="async" /></span>
+              <span class="lp-card-foot">
+                <svg class="lp-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.2 4.6c-1-.6-2.2.1-2.2 1.3v12.2c0 1.2 1.2 1.9 2.2 1.3l10.1-6.1c1-.6 1-2 0-2.6Z" fill="currentColor"/></svg>
+                <span class="lp-card-text"><strong>Tree</strong><span>Leaves fall as minutes pass</span></span>
               </span>
             </button>
           </li>
@@ -215,12 +222,6 @@
        SCREEN 1 · Vibe Selection
   ══════════════════════════════════════════ -->
   <section id="screen-vibe" class="screen" aria-label="Choose your focus vibe">
-    <button id="btn-back-hero" class="btn-back vibe-back" aria-label="Back to home">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-        <path d="M19 12H5M12 5l-7 7 7 7"/>
-      </svg>
-      <span>Back</span>
-    </button>
     <header class="vibe-header">
       <p class="app-eyebrow">VibeFocus</p>
       <p class="app-tagline">Focus isn't tracked. It's experienced.</p>

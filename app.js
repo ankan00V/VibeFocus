@@ -127,7 +127,6 @@ const fadeOverlay  = $('fade-overlay');
 const btnHowItWorks = document.querySelectorAll('.btn-how-it-works');
 const hiwModal = document.getElementById('how-it-works-modal');
 const hiwCloseBtn = document.getElementById('hiw-close-btn');
-const btnBackHero = document.getElementById('btn-back-hero');
 const lpRoot = document.getElementById('lp');
 const lpVideo = lpRoot ? lpRoot.querySelector('.lp-video') : null;
 const prefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -179,19 +178,44 @@ function startHeroFocusSession(vidId = 0) {
   goTo('duration', true);
 }
 
-// "Start focus" (nav + hero) → Candle, the flagship vibe
-document.querySelectorAll('.js-start-focus').forEach(btn => {
-  btn.addEventListener('click', () => startHeroFocusSession(0));
-});
-// Vibe cards → that vibe
+// Vibe cards → that vibe's duration screen
 document.querySelectorAll('.lp-card[data-vid]').forEach(card => {
   card.addEventListener('click', () => startHeroFocusSession(parseInt(card.dataset.vid, 10) || 0));
 });
-// "browse all vibes" → full vibe picker (all four)
-document.querySelectorAll('.js-open-vibes').forEach(btn => {
-  btn.addEventListener('click', () => goTo('vibe'));
+
+// "Start focus" (nav + hero) → scroll down to "Pick your vibe" and point at the cards
+function showVibeCards() {
+  const hero = screens.hero;
+  const title = document.getElementById('lp-vibes-title');
+  const cardsList = document.getElementById('lp-cards');
+  if (!hero || !title || !cardsList) return;
+  const heroTop = hero.getBoundingClientRect().top;
+  const titleTop = title.getBoundingClientRect().top - heroTop + hero.scrollTop;
+  const cardsBottom = cardsList.getBoundingClientRect().bottom - heroTop + hero.scrollTop;
+  const view = hero.clientHeight;
+  // Fit the title and the cards if they fit, otherwise lead with the title
+  let target = cardsBottom - titleTop + 72 <= view ? cardsBottom + 36 - view : titleTop - 24;
+  target = Math.max(0, Math.min(target, hero.scrollHeight - view));
+  hero.scrollTo({ top: target, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+
+  const cards = Array.from(cardsList.querySelectorAll('.lp-card'));
+  if (cards[0]) cards[0].focus({ preventScroll: true });
+  if (prefersReducedMotion) return;
+  const lift = Math.max(4, (cardsList.getBoundingClientRect().width / 1175) * 10);
+  cards.forEach((card, i) => {
+    setTimeout(() => {
+      card.classList.add('is-nudged');
+      card.animate(
+        [{ transform: 'translateY(0)' }, { transform: `translateY(${-lift}px)` }, { transform: 'translateY(0)' }],
+        { duration: 650, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' }
+      );
+      setTimeout(() => card.classList.remove('is-nudged'), 900);
+    }, 420 + i * 110);
+  });
+}
+document.querySelectorAll('.js-start-focus').forEach(btn => {
+  btn.addEventListener('click', showVibeCards);
 });
-if (btnBackHero) btnBackHero.addEventListener('click', () => goTo('hero'));
 
 // How it works modal
 function closeHiwModal() {
@@ -220,7 +244,8 @@ document.addEventListener('keydown', (e) => {
 function playHeroVideo() {
   if (!lpVideo || prefersReducedMotion) return;
   if (!lpVideo.src && lpVideo.dataset.src) {
-    lpVideo.src = lpVideo.dataset.src;
+    const small = window.matchMedia && window.matchMedia('(max-width: 820px)').matches;
+    lpVideo.src = (small && lpVideo.dataset.srcSmall) || lpVideo.dataset.src;
     lpVideo.addEventListener('playing', () => lpVideo.classList.add('is-playing'), { once: true });
   }
   lpVideo.muted = true;
