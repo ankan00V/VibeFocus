@@ -564,6 +564,7 @@ async function launchFocus() {
   }
 
   state.startTime = performance.now();
+  state.finaleStart = null;
   if (focusWorker) {
     focusWorker.postMessage('start');
   } else {
@@ -664,14 +665,36 @@ function tickFocus(now) {
   // user taps, so the feed must not wait until PiP is active.
   paintPipProxy(timeStr, now);
 
+  // 00:00 — let the vibe's final moment play out on the focus screen
+  // (candle goes out, last drop lands, last leaf settles, painting finished)
+  // before moving to the completion screen.
   if (elapsed >= state.totalSeconds) {
-    onSessionComplete();
-    return;
+    if (!state.finaleStart) {
+      state.finaleStart = now;
+      if (state.vibe === 'candle') fadeOutAmbient(1.5); // the fire dies with the flame
+    }
+    if (finaleDone(state.vibe, (now - state.finaleStart) / 1000)) {
+      state.finaleStart = null;
+      onSessionComplete();
+      return;
+    }
   }
 
   if (!focusWorker) {
     state.rafId = requestAnimationFrame(tickFocus);
   }
+}
+
+// How long each vibe's 00:00 moment is shown before the completion screen
+function finaleDone(vibe, sinceEnd) {
+  if (vibe === 'candle')  return sinceEnd >= 5.0;   // flame out, ember, smoke wisp
+  if (vibe === 'ice')     return sinceEnd >= 3.0;   // last drop's rings on the full bowl
+  if (vibe === 'gallery') return sinceEnd >= 3.5;   // finished painting, label appears
+  if (vibe === 'tree') {
+    const settled = typeof isTreeSettled === 'function' ? isTreeSettled() : true;
+    return (settled && sinceEnd >= 1.0) || sinceEnd >= 10;  // last leaf has landed
+  }
+  return true;
 }
 
 function onSessionComplete() {
@@ -2499,8 +2522,8 @@ function drawGallery(ctx, W, H, p, time) {
     }
     const L = C.L;
 
-    // Painting finishes just before the timer reaches 00:00
-    const pc = isPreview ? Math.min(1, p * 1.1) : Math.min(1, p / 0.985);
+    // The final stroke lands exactly as the timer reaches 00:00
+    const pc = isPreview ? Math.min(1, p * 1.1) : Math.min(1, p);
 
     // Rebuild the paint masks only when progress has moved enough to matter
     if (Math.abs(pc - C.lastP) > (isPreview ? 0.01 : 0.0004) || C.lastP < 0) {
@@ -2538,7 +2561,7 @@ function drawGallery(ctx, W, H, p, time) {
     _galleryLightOverlay(ctx, L);
 
     // ── Museum label, placed on the wall beneath the frame ──
-    if (!isPreview && p >= 0.985) {
+    if (!isPreview && p >= 1) {
       if (GALLERY.placardShownAt === 0) GALLERY.placardShownAt = time;
       const a = Math.min(1, (time - GALLERY.placardShownAt) / 1.2);
       if (a > 0.01) {
@@ -2570,7 +2593,7 @@ function drawGallery(ctx, W, H, p, time) {
         ctx.fillText(`${art.artist}, ${art.year}`, pX + 14, pY + 45, pW - 28);
         ctx.restore();
       }
-    } else if (p < 0.98) {
+    } else if (p < 1) {
       GALLERY.placardShownAt = 0;
     }
 
@@ -2932,6 +2955,17 @@ function stopAllSound() {
     });
   }
   state.audioNodes = {};
+}
+
+function fadeOutAmbient(sec) {
+  const ctx = state.audioCtx;
+  const gain = state.audioNodes.ambientGain;
+  if (!ctx || !gain) return;
+  try {
+    gain.gain.cancelScheduledValues(ctx.currentTime);
+    gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + sec);
+  } catch (_) {}
 }
 
 function startAmbient(vibe) {

@@ -39,6 +39,7 @@ const BOWL3D = {
     drop: null,
     splash: [],
     lastLanded: -1,
+    endAt: null,
     built: false,
 };
 
@@ -516,18 +517,17 @@ function renderWaterBowl3D(progress = 0, time = 0, isCeremony = false, totalSeco
     p = Math.max(0, Math.min(1, p));
     const total = Math.max(1, Number(totalSeconds) || 60);
     const t = Number.isFinite(Number(time)) ? Number(time) : 0;
-    const elapsed = p * total;
+    // After 00:00 keep time flowing so the last drop's rings keep spreading
+    if (p >= 1 && !isCeremony) { if (B.endAt == null) B.endAt = t; } else B.endAt = null;
+    const elapsed = p * total + (B.endAt != null ? Math.max(0, t - B.endAt) : 0);
 
     const sched = bowlDropSchedule(total);
     // Drop k (1-based) lands at k * interval; the last one at exactly `total`
     let landed = isCeremony ? sched.count : Math.min(sched.count, Math.floor(elapsed / sched.interval + 1e-6));
 
-    // Fill: each drop adds 1/count of the volume, eased in over a fraction of a second
-    const sinceLast = elapsed - landed * sched.interval;
-    const settle = Math.min(1, sinceLast / 0.4);
-    let fill = isCeremony ? 1 : Math.min(1, (landed - 1 + settle) / sched.count);
-    if (landed === 0) fill = 0;
-    fill = Math.max(0, fill);
+    // Fill: each drop adds exactly 1/count of the volume as it lands, so the
+    // last drop at 00:00 brings the water to the brim
+    const fill = isCeremony ? 1 : Math.max(0, Math.min(1, landed / sched.count));
 
     const levelY = bowlLevelForFill(fill);
     const waterR = bowlInnerR(levelY);
@@ -626,6 +626,7 @@ function renderWaterBowl3D(progress = 0, time = 0, isCeremony = false, totalSeco
 
 function resetWaterBowl3D() {
     BOWL3D.lastLanded = -1;
+    BOWL3D.endAt = null;
 }
 
 function resizeWaterBowl3D(width, height) {
