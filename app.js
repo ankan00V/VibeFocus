@@ -28,11 +28,13 @@
   }
 })();
 
-/* ── PiP Proxy (Fixes Safari WebGL captureStream bugs) ── */
+/* ── PiP Proxy (Fixes Safari WebGL captureStream bugs) ──
+   A 2D canvas that mirrors the active visual plus the countdown; its
+   captureStream feeds the hidden <video> that is shown in Picture-in-Picture. */
 const pipProxyCanvas = document.createElement('canvas');
 pipProxyCanvas.id = 'pip-proxy-canvas';
-pipProxyCanvas.width = 1280;
-pipProxyCanvas.height = 720;
+pipProxyCanvas.width = 960;
+pipProxyCanvas.height = 540;
 // Make it part of the render tree but invisible so Safari captureStream works
 pipProxyCanvas.style.position = 'fixed';
 pipProxyCanvas.style.top = '-9999px';
@@ -40,7 +42,7 @@ pipProxyCanvas.style.left = '-9999px';
 pipProxyCanvas.style.pointerEvents = 'none';
 const pipProxyCtx = pipProxyCanvas.getContext('2d', { alpha: false });
 pipProxyCtx.fillStyle = '#000';
-pipProxyCtx.fillRect(0, 0, 1280, 720);
+pipProxyCtx.fillRect(0, 0, pipProxyCanvas.width, pipProxyCanvas.height);
 // Some browsers require the canvas in the DOM for captureStream
 document.addEventListener('DOMContentLoaded', () => document.body.appendChild(pipProxyCanvas));
 
@@ -388,6 +390,7 @@ document.querySelectorAll('.vibe-card').forEach(card => {
 
   card.addEventListener('click', () => {
     state.vibe = card.dataset.vibe;
+    preloadAmbient(state.vibe);
     vibeLabel.textContent = card.querySelector('.vibe-name').textContent.toUpperCase();
     // Reset duration selection
     document.querySelectorAll('.dur-pill').forEach(p => p.classList.remove('selected'));
@@ -517,6 +520,8 @@ btnStart.addEventListener('click', () => {
   // BEFORE any async/await boundaries, so the user gesture token is preserved.
   if (pipVideo && typeof pipProxyCanvas.captureStream === 'function') {
     try {
+      sizePipProxy();
+      paintPipProxy(fmt(state.totalSeconds), performance.now(), true);
       if (!pipVideo.srcObject) {
         pipVideo.srcObject = pipProxyCanvas.captureStream(30);
       }
@@ -567,6 +572,65 @@ async function launchFocus() {
   showHud();
 }
 
+function isPipActive() {
+  return !!pipVideo && (document.pictureInPictureElement === pipVideo ||
+    pipVideo.webkitPresentationMode === 'picture-in-picture');
+}
+
+// Match the PiP window to the screen shape (portrait phones get a portrait
+// window), within the aspect range browsers accept for PiP.
+function sizePipProxy() {
+  const a = Math.max(9 / 16, Math.min(16 / 9, window.innerWidth / Math.max(1, window.innerHeight)));
+  const w = a >= 1 ? 960 : Math.round(960 * a);
+  const h = a >= 1 ? Math.round(960 / a) : 960;
+  if (pipProxyCanvas.width !== w || pipProxyCanvas.height !== h) {
+    pipProxyCanvas.width = w;
+    pipProxyCanvas.height = h;
+  }
+}
+
+let _lastPipPaint = 0;
+function paintPipProxy(timeStr, now, force = false) {
+  const active = isPipActive();
+  // Full rate while in PiP; a light 4 fps keep-alive otherwise
+  if (!force && !active && now - _lastPipPaint < 250) return;
+  _lastPipPaint = now;
+
+  let src = focusCanvas;
+  if (state.vibe === 'ice') src = document.getElementById('water-bowl-canvas');
+  if (state.vibe === 'tree') src = document.getElementById('tree-canvas');
+  if (state.vibe === 'candle') src = document.getElementById('candle-canvas');
+  const W = pipProxyCanvas.width, H = pipProxyCanvas.height;
+  const x = pipProxyCtx;
+  try {
+    x.fillStyle = '#000';
+    x.fillRect(0, 0, W, H);
+    if (src && src.width > 0 && src.height > 0) {
+      // cover-fit so the visual fills the PiP window
+      const sa = src.width / src.height, pa = W / H;
+      let sw = src.width, sh = src.height, sx = 0, sy = 0;
+      if (sa > pa) { sw = src.height * pa; sx = (src.width - sw) / 2; }
+      else { sh = src.width / pa; sy = (src.height - sh) / 2; }
+      x.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
+    }
+    // Countdown pill
+    const fs = Math.round(Math.min(W, H) * 0.075);
+    const pw = fs * 4.2, ph = fs * 1.7;
+    const px = (W - pw) / 2, py = H - ph - Math.min(W, H) * 0.06;
+    x.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    x.beginPath();
+    if (x.roundRect) x.roundRect(px, py, pw, ph, ph / 2); else x.rect(px, py, pw, ph);
+    x.fill();
+    x.fillStyle = '#fff';
+    x.font = `500 ${fs}px Inter, -apple-system, sans-serif`;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText(timeStr, W / 2, py + ph / 2 + 1);
+  } catch (err) {
+    console.warn('PiP proxy canvas draw failed:', err);
+  }
+}
+
 function tickFocus(now) {
   // Mobile frame throttle: skip frame if not enough time has passed
   if (IS_MOBILE && now - _lastFocusFrame < TARGET_FRAME_MS) {
@@ -595,65 +659,10 @@ function tickFocus(now) {
   hudFill.style.width = (prog * 100).toFixed(2) + '%';
   hudFill.setAttribute('aria-valuenow', Math.round(prog * 100));
 
-  // Draw timer directly on canvas if PiP is active
-  const isPipActive = document.pictureInPictureElement === pipVideo || 
-                     (pipVideo.webkitPresentationMode === "picture-in-picture");
-                     
-  if (isPipActive) {
-    focusCtx.save();
-    focusCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    focusCtx.beginPath();
-    focusCtx.roundRect((focusCanvas.width / RENDER_DPR) / 2 - 60, (focusCanvas.height / RENDER_DPR) - 60, 120, 40, 20);
-    focusCtx.fill();
-    
-    focusCtx.fillStyle = '#ffffff';
-    focusCtx.font = '24px "Inter", sans-serif';
-    focusCtx.textAlign = 'center';
-    focusCtx.textBaseline = 'middle';
-    focusCtx.fillText(timeStr, (focusCanvas.width / RENDER_DPR) / 2, (focusCanvas.height / RENDER_DPR) - 40);
-    focusCtx.restore();
-    
-    // Copy the active WebGL canvas to our 2D proxy to fix Safari PiP blank stream bugs
-    let activeCanvas = focusCanvas;
-    if (state.vibe === 'ice') activeCanvas = document.getElementById('water-bowl-canvas');
-    if (state.vibe === 'tree') activeCanvas = document.getElementById('tree-canvas');
-    if (state.vibe === 'candle') activeCanvas = document.getElementById('candle-canvas');
-    
-    if (activeCanvas && activeCanvas.width > 0 && activeCanvas.height > 0) {
-      try {
-        pipProxyCtx.fillStyle = '#000';
-        pipProxyCtx.fillRect(0, 0, pipProxyCanvas.width, pipProxyCanvas.height);
-        
-        // Calculate aspect-ratio-preserving dimensions
-        const proxyAspect = pipProxyCanvas.width / pipProxyCanvas.height;
-        const activeAspect = activeCanvas.width / activeCanvas.height;
-        
-        let drawW = pipProxyCanvas.width;
-        let drawH = pipProxyCanvas.height;
-        let drawX = 0;
-        let drawY = 0;
-        
-        if (activeAspect > proxyAspect) {
-          // Source is wider
-          drawH = pipProxyCanvas.width / activeAspect;
-          drawY = (pipProxyCanvas.height - drawH) / 2;
-        } else {
-          // Source is taller
-          drawW = pipProxyCanvas.height * activeAspect;
-          drawX = (pipProxyCanvas.width - drawW) / 2;
-        }
-        
-        pipProxyCtx.drawImage(activeCanvas, 0, 0, activeCanvas.width, activeCanvas.height, drawX, drawY, drawW, drawH);
-        
-        // If using a 3D canvas, draw the focusCanvas (which has the timer text) on top
-        if (activeCanvas !== focusCanvas && focusCanvas.width > 0 && focusCanvas.height > 0) {
-          pipProxyCtx.drawImage(focusCanvas, 0, 0, focusCanvas.width, focusCanvas.height, drawX, drawY, drawW, drawH);
-        }
-      } catch (err) {
-        console.warn('PiP proxy canvas draw failed:', err);
-      }
-    }
-  }
+  // Keep the Picture-in-Picture feed live for the whole session. Mobile
+  // browsers only allow PiP on a video that already has frames when the
+  // user taps, so the feed must not wait until PiP is active.
+  paintPipProxy(timeStr, now);
 
   if (elapsed >= state.totalSeconds) {
     onSessionComplete();
@@ -792,24 +801,51 @@ if (btnFullscreenToggle) {
 }
 
 /* ── Picture-in-Picture (Widget) ── */
+function pipSupported() {
+  if (!pipVideo || typeof pipProxyCanvas.captureStream !== 'function') return false;
+  if (document.pictureInPictureEnabled && typeof pipVideo.requestPictureInPicture === 'function') return true;
+  return typeof pipVideo.webkitSupportsPresentationMode === 'function' &&
+         pipVideo.webkitSupportsPresentationMode('picture-in-picture');
+}
+
 if (btnPip && pipVideo) {
+  // Hide the button where PiP can't work rather than leaving a dead control
+  if (!pipSupported()) btnPip.style.display = 'none';
+
   btnPip.addEventListener('click', () => {
     try {
-      if (document.pictureInPictureElement) {
-        document.exitPictureInPicture().catch(console.warn);
-      } else if (pipVideo.webkitSupportsPresentationMode && typeof pipVideo.webkitSetPresentationMode === "function") {
-        pipVideo.webkitSetPresentationMode(pipVideo.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture");
-      } else {
-        if (pipVideo.readyState >= 1) {
-          pipVideo.requestPictureInPicture().catch(console.warn);
-        } else {
-          // Fallback if somehow not ready
-          pipVideo.onloadedmetadata = () => pipVideo.requestPictureInPicture().catch(console.warn);
-        }
+      if (isPipActive()) {
+        if (document.pictureInPictureElement) document.exitPictureInPicture().catch(console.warn);
+        else pipVideo.webkitSetPresentationMode('inline');
+        return;
+      }
+      // Make sure the feed is attached and has a fresh frame — synchronously,
+      // so the tap still counts as the user gesture PiP requires.
+      if (!pipVideo.srcObject) pipVideo.srcObject = pipProxyCanvas.captureStream(30);
+      paintPipProxy(hudTime.textContent || '', performance.now(), true);
+      if (pipVideo.paused) pipVideo.play().catch(() => {});
+
+      if (document.pictureInPictureEnabled && typeof pipVideo.requestPictureInPicture === 'function') {
+        pipVideo.requestPictureInPicture().catch(err => {
+          console.warn('PiP request failed:', err);
+          // One retry once the video has data (some browsers need a frame first)
+          if (pipVideo.readyState < 2) {
+            pipVideo.addEventListener('loadeddata', () => {
+              pipVideo.requestPictureInPicture().catch(console.warn);
+            }, { once: true });
+          }
+        });
+      } else if (typeof pipVideo.webkitSetPresentationMode === 'function') {
+        pipVideo.webkitSetPresentationMode('picture-in-picture');
       }
     } catch (err) {
       console.warn('PiP failed or unsupported', err);
     }
+  });
+
+  // Leaving PiP from the system controls should not stop the session feed
+  pipVideo.addEventListener('leavepictureinpicture', () => {
+    if (pipVideo.paused) pipVideo.play().catch(() => {});
   });
 }
 
@@ -2094,10 +2130,11 @@ function drawLeaf(ctx, x, y, size, color, rot, alpha) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   GALLERY — Organic Ink Bloom Reveal
-   A painting is covered by a frosted layer. Over the session,
-   soft overlapping "ink blooms" (radial gradients) grow
-   randomly across the canvas to reveal the painting underneath.
+   GALLERY — The painting is painted in over the session
+   A framed canvas hangs on a gallery wall under a picture light.
+   Over the session the bare primed canvas receives a tonal
+   underpainting and then colour, stroke by stroke, finishing
+   just before 00:00, when the museum label appears.
 ══════════════════════════════════════════════════════════ */
 
 const GALLERY = {
@@ -2108,25 +2145,24 @@ const GALLERY = {
 
   artworks: [
     { id: 'starry',      src: 'paintings/starry-night.jpeg',        title: 'The Starry Night',              artist: 'Vincent van Gogh',      year: '1889' },
+    { id: 'athens',      src: 'paintings/school-of-athens.jpeg',    title: 'The School of Athens',          artist: 'Raphael',               year: '1511' },
     { id: 'wheat',       src: 'paintings/wheat-field-cypresses.jpeg',title: 'Wheat Field with Cypresses',    artist: 'Vincent van Gogh',      year: '1889' },
     { id: 'boulevard',   src: 'paintings/boulevard-montmartre.jpeg', title: 'Boulevard Montmartre',          artist: 'Camille Pissarro',      year: '1897' },
     { id: 'waterlilies', src: 'paintings/water-lilies.jpeg',         title: 'Water Lilies',                  artist: 'Claude Monet',          year: '1906' },
     { id: 'bridge',      src: 'paintings/japanese-bridge.jpeg',      title: 'The Water Lily Pond',           artist: 'Claude Monet',          year: '1900' },
     { id: 'almond',      src: 'paintings/almond-blossoms.jpeg',      title: 'Almond Blossoms',              artist: 'Vincent van Gogh',      year: '1890' },
     { id: 'luncheon',    src: 'paintings/luncheon-boating.jpeg',     title: 'Luncheon of the Boating Party', artist: 'Pierre-Auguste Renoir', year: '1881' },
-    { id: 'wave',        src: 'paintings/great-wave.jpeg',           title: 'The Great Wave off Kanagawa',   artist: 'Katsushika Hokusai',    year: '1831' },
-    { id: 'pearl',       src: 'paintings/girl-pearl-earring.jpeg',   title: 'Girl with a Pearl Earring',     artist: 'Johannes Vermeer',      year: '1665' },
+    { id: 'irises',      src: 'paintings/irises.jpeg',               title: 'Irises',                        artist: 'Vincent van Gogh',      year: '1889' },
   ],
 
   currentArt: null,
 
   // Reveal state
-  blobs: [],                // Array of {x, y, maxR}
-  placardShownAt: 0,        // time the placard started fading in (0 = not yet)
-  
-  // Offscreen canvas for the mask
-  maskCanvas: null,
-  maskCtx: null
+  seed: 0,
+  field: null,              // brush-stroke reveal order (low-res Float32 field)
+  under: null,              // sepia underpainting canvas
+  caches: null,             // per-canvas layout/layer caches (WeakMap)
+  placardShownAt: 0,        // time the museum label started fading in (0 = not yet)
 };
 
 /* ── seeded PRNG (mulberry32) ── */
@@ -2176,261 +2212,370 @@ function galleryReset() {
   GALLERY.image.onload = () => { GALLERY.loaded = true; };
   GALLERY.image.onerror = () => { GALLERY.error = true; };
 
-  // ── Derive blob count M from session duration ──
-  // M scales from 300 to 1500.
-  const totalSecs = state.totalSeconds || 60;
-  const targetM = Math.max(300, Math.min(1500, Math.round(totalSecs * 15)));
+  // Reveal-order field and per-canvas render caches are built lazily
+  GALLERY.seed = _gallerySeed(GALLERY.currentArt.id + Date.now().toString());
+  GALLERY.field = null;
+  GALLERY.under = null;
+  GALLERY.caches = new WeakMap();
+}
 
-  // Calculate best grid dimensions for M (assume roughly 16:9 screen)
-  const cols = Math.ceil(Math.sqrt(targetM * 1.77)); 
-  const rows = Math.ceil(targetM / cols);
-  
-  GALLERY.cols = cols;
-  GALLERY.rows = rows;
+/* ── Brush-stroke reveal order ──
+   Simulates a painter working: broad blocking-in strokes first (centre of
+   interest early), then progressively finer strokes. Each cell of a low-res
+   field stores the moment (0..1) its paint goes down. */
+function _galleryBuildField(aspect, seed) {
+  const FW = 168;
+  const FH = Math.max(48, Math.round(FW / aspect));
+  const field = new Float32Array(FW * FH).fill(2);
+  const rng = _galleryRng(seed);
+  const N = 1600;
+  const ang0 = rng() * Math.PI;
 
-  const sessionSeed = _gallerySeed(GALLERY.currentArt.id + Date.now().toString());
-  const rng = _galleryRng(sessionSeed);
-  
-  const blobs = [];
-  
-  // ── Build jittered grid ──
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cx = (c + 0.5) / cols;
-      const cy = (r + 0.5) / rows;
-      
-      // Jitter position ±40% of cell size
-      const jx = (rng() - 0.5) * 0.8 / cols;
-      const jy = (rng() - 0.5) * 0.8 / rows;
-      
-      // Generate a cluster of drops for a true watercolor splash effect
-      const drops = [];
-      
-      // Core drop
-      drops.push({
-        dx: 0, dy: 0,
-        // High variance so splashes range from very small to medium-large
-        rMult: 0.2 + 1.2 * rng() 
-      });
-      
-      // Satellite drops: pushed outwards for organic splatter texture
-      const numSats = 2 + Math.floor(rng() * 8); // 2 to 9 satellites for high variety
-      for (let s = 0; s < numSats; s++) {
-        const angle = rng() * Math.PI * 2;
-        // Distribute satellites further out to create spindly splash arms
-        const dist = 0.5 + 0.7 * rng(); 
-        const satR = 0.2 + 0.3 * rng(); 
-        
-        drops.push({
-          dx: Math.cos(angle) * dist,
-          dy: Math.sin(angle) * dist,
-          rMult: satR
-        });
+  for (let i = 0; i < N; i++) {
+    const t = i / N;
+    // Best-of-k: prefer spots not painted yet so coverage spreads naturally
+    let bx = 0, by = 0, best = -1;
+    const k = 10;
+    for (let c = 0; c < k; c++) {
+      let x, y;
+      if (t < 0.3 && rng() < 0.5) {
+        // early strokes favour the centre of interest
+        const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * (0.25 + t * 1.6);
+        x = 0.5 + Math.cos(a) * r * 0.5; y = 0.46 + Math.sin(a) * r * 0.5;
+      } else {
+        x = rng(); y = rng();
       }
-      
-      blobs.push({ x: cx + jx, y: cy + jy, drops: drops });
+      x = Math.min(0.999, Math.max(0, x)); y = Math.min(0.999, Math.max(0, y));
+      const v = field[Math.floor(y * FH) * FW + Math.floor(x * FW)];
+      const score = v + rng() * 0.3;
+      if (score > best) { best = score; bx = x; by = y; }
+    }
+    // Stroke size shrinks as the painting is refined
+    const width = (0.055 * Math.pow(1 - t, 1.2) + 0.018) * FW * (0.75 + rng() * 0.5);
+    const len = width * (1.6 + rng() * 2.2);
+    // Brush direction follows a gentle flow field, like consistent handwork
+    const ang = ang0 + Math.sin(bx * 5.0 + by * 3.0) * 0.9 + (rng() - 0.5) * 0.6;
+    const cx = bx * FW, cy = by * FH;
+    const dx = Math.cos(ang) * len * 0.5, dy = Math.sin(ang) * len * 0.5;
+    const x0 = cx - dx, y0 = cy - dy, x1 = cx + dx, y1 = cy + dy;
+    const rad = width * 0.5;
+    const minX = Math.max(0, Math.floor(Math.min(x0, x1) - rad)), maxX = Math.min(FW - 1, Math.ceil(Math.max(x0, x1) + rad));
+    const minY = Math.max(0, Math.floor(Math.min(y0, y1) - rad)), maxY = Math.min(FH - 1, Math.ceil(Math.max(y0, y1) + rad));
+    const sx = x1 - x0, sy = y1 - y0, sl = sx * sx + sy * sy || 1;
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        let u = ((x - x0) * sx + (y - y0) * sy) / sl;
+        u = Math.max(0, Math.min(1, u));
+        const px = x0 + sx * u - x, py = y0 + sy * u - y;
+        // ragged, bristly edge; the stroke tapers at its tail
+        const edge = rad * (0.78 + 0.32 * rng()) * (1 - 0.35 * u);
+        if (px * px + py * py < edge * edge) {
+          const o = y * FW + x;
+          // paint goes down along the stroke, with a little bristle jitter
+          const tv = t + u * 0.004;
+          if (tv < field[o]) field[o] = tv;
+        }
+      }
     }
   }
-
-  // Shuffle the blobs independent of position (determines reveal order)
-  const rngShuffle = _galleryRng(sessionSeed + 1);
-  for (let i = blobs.length - 1; i > 0; i--) {
-    const j = Math.floor(rngShuffle() * (i + 1));
-    [blobs[i], blobs[j]] = [blobs[j], blobs[i]];
+  // Final touches: anything still bare is finished at the very end
+  for (let i = 0; i < field.length; i++) {
+    if (field[i] > 1) field[i] = 1.5 + rng() * 0.1;
   }
-  
-  GALLERY.blobs = blobs;
+  // Soften: a small blur removes isolated cells so edges read as brushwork
+  for (let pass = 0; pass < 2; pass++) {
+    const src = field.slice();
+    for (let y = 0; y < FH; y++) {
+      for (let x = 0; x < FW; x++) {
+        let sum = 0, n = 0;
+        for (let oy = -1; oy <= 1; oy++) {
+          const yy = y + oy; if (yy < 0 || yy >= FH) continue;
+          for (let ox = -1; ox <= 1; ox++) {
+            const xx = x + ox; if (xx < 0 || xx >= FW) continue;
+            sum += src[yy * FW + xx]; n++;
+          }
+        }
+        field[y * FW + x] = sum / n;
+      }
+    }
+  }
+  // Equalise by rank so painted area grows steadily with the timer
+  const order = Array.from(field.keys()).sort((a, b) => field[a] - field[b]);
+  const out = new Float32Array(field.length);
+  for (let r = 0; r < order.length; r++) out[order[r]] = r / (order.length - 1);
+  return { FW, FH, field: out };
+}
+
+/* ── Sepia underpainting derived from the artwork ── */
+function _galleryBuildUnder(img) {
+  const w = 360, h = Math.max(1, Math.round(360 * img.height / img.width));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  x.drawImage(img, 0, 0, w, h);
+  try {
+    const d = x.getImageData(0, 0, w, h);
+    const a = d.data;
+    for (let i = 0; i < a.length; i += 4) {
+      let l = (a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11) / 255;
+      l = 0.22 + 0.7 * Math.pow(l, 0.9);               // flatter, like a tonal sketch
+      a[i]     = 52 + l * 180;
+      a[i + 1] = 36 + l * 160;
+      a[i + 2] = 24 + l * 128;
+    }
+    x.putImageData(d, 0, 0);
+  } catch (_) { /* tainted canvas: fall back to the plain image */ }
+  return c;
+}
+
+function _galleryLayout(W, H, img) {
+  const portrait = H > W * 1.1;
+  const isPreview = W < 300;
+  const aspect = img.width / img.height;
+  const border = isPreview ? Math.max(4, W * 0.035) : Math.max(12, Math.min(42, Math.min(W, H) * 0.042));
+  const maxW = W * (isPreview ? 0.86 : portrait ? 0.84 : 0.66) - border * 2;
+  const maxH = H * (isPreview ? 0.70 : portrait ? 0.60 : 0.64) - border * 2;
+  let iw = maxW, ih = maxW / aspect;
+  if (ih > maxH) { ih = maxH; iw = maxH * aspect; }
+  const cx = W / 2;
+  const cy = H * (isPreview ? 0.5 : portrait ? 0.44 : 0.46);
+  return {
+    W, H, border, isPreview,
+    ix: Math.round(cx - iw / 2), iy: Math.round(cy - ih / 2), iw: Math.round(iw), ih: Math.round(ih),
+  };
+}
+
+// Wall, picture light, gilded frame and primed canvas — rendered once per layout
+function _galleryBuildStatic(L, dpr) {
+  const c = document.createElement('canvas');
+  c.width = Math.round(L.W * dpr); c.height = Math.round(L.H * dpr);
+  const x = c.getContext('2d');
+  x.scale(dpr, dpr);
+  const { W, H, ix, iy, iw, ih, border: b } = L;
+
+  // Wall: deep warm grey plaster
+  x.fillStyle = '#121010';
+  x.fillRect(0, 0, W, H);
+  const n = document.createElement('canvas');
+  n.width = 256; n.height = 256;
+  const nx = n.getContext('2d');
+  const nd = nx.createImageData(256, 256);
+  const rng = _galleryRng(7);
+  for (let i = 0; i < nd.data.length; i += 4) {
+    const v = 128 + (rng() - 0.5) * 34;
+    nd.data[i] = nd.data[i + 1] = nd.data[i + 2] = v; nd.data[i + 3] = 255;
+  }
+  nx.putImageData(nd, 0, 0);
+  x.save();
+  x.globalAlpha = 0.05;
+  x.globalCompositeOperation = 'overlay';
+  x.imageSmoothingEnabled = true;
+  x.drawImage(n, 0, 0, W, H);
+  x.restore();
+
+  // Picture light: a warm pool on the wall, strongest just above the frame
+  const lcx = W / 2, lcy = iy - b - Math.min(H * 0.08, 60);
+  const lr = Math.max(iw * 1.05, ih * 1.25);
+  const wash = x.createRadialGradient(lcx, lcy, 0, lcx, lcy, lr);
+  wash.addColorStop(0, 'rgba(255, 226, 184, 0.20)');
+  wash.addColorStop(0.45, 'rgba(255, 214, 165, 0.09)');
+  wash.addColorStop(1, 'rgba(255, 200, 150, 0)');
+  x.fillStyle = wash;
+  x.fillRect(0, 0, W, H);
+  // Vignette into the dark room
+  const vg = x.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.3, W / 2, H * 0.45, Math.max(W, H) * 0.8);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+  x.fillStyle = vg;
+  x.fillRect(0, 0, W, H);
+
+  // Frame drop shadow (light comes from above)
+  const fx = ix - b, fy = iy - b, fw = iw + b * 2, fh = ih + b * 2;
+  x.save();
+  x.shadowColor = 'rgba(0, 0, 0, 0.75)';
+  x.shadowBlur = L.isPreview ? 6 : 34;
+  x.shadowOffsetY = L.isPreview ? 3 : 18;
+  x.fillStyle = '#1b140c';
+  x.fillRect(fx, fy, fw, fh);
+  x.restore();
+
+  // Gilded moulding: bands from outer edge to sight edge, each side lit differently
+  const bands = [
+    { a: 0.00, b: 0.10, col: [58, 42, 22] },     // outer dark edge
+    { a: 0.10, b: 0.42, col: [176, 138, 72] },   // main gold cove
+    { a: 0.42, b: 0.55, col: [214, 178, 106] },  // raised bead (catches light)
+    { a: 0.55, b: 0.86, col: [128, 96, 50] },    // inner scotia
+    { a: 0.86, b: 0.94, col: [70, 52, 28] },     // shadowed lip
+    { a: 0.94, b: 1.00, col: [222, 190, 120] },  // bright sight edge
+  ];
+  const sides = [
+    { lit: 1.18, poly: (o, i) => [[fx + o, fy + o], [fx + fw - o, fy + o], [fx + fw - i, fy + i], [fx + i, fy + i]] },          // top
+    { lit: 0.62, poly: (o, i) => [[fx + o, fy + fh - o], [fx + fw - o, fy + fh - o], [fx + fw - i, fy + fh - i], [fx + i, fy + fh - i]] }, // bottom
+    { lit: 0.95, poly: (o, i) => [[fx + o, fy + o], [fx + i, fy + i], [fx + i, fy + fh - i], [fx + o, fy + fh - o]] },         // left
+    { lit: 0.80, poly: (o, i) => [[fx + fw - o, fy + o], [fx + fw - i, fy + i], [fx + fw - i, fy + fh - i], [fx + fw - o, fy + fh - o]] }, // right
+  ];
+  for (const s of sides) {
+    for (const band of bands) {
+      const o = band.a * b, i2 = band.b * b;
+      const pts = s.poly(o, i2);
+      // a bead/cove reads as a gradient across the band
+      const g = x.createLinearGradient(pts[0][0], pts[0][1], pts[3][0], pts[3][1]);
+      const c0 = band.col.map(v => Math.min(255, Math.round(v * s.lit * 1.08)));
+      const c1 = band.col.map(v => Math.min(255, Math.round(v * s.lit * 0.82)));
+      g.addColorStop(0, `rgb(${c0})`);
+      g.addColorStop(1, `rgb(${c1})`);
+      x.fillStyle = g;
+      x.beginPath();
+      x.moveTo(pts[0][0], pts[0][1]);
+      for (let k = 1; k < 4; k++) x.lineTo(pts[k][0], pts[k][1]);
+      x.closePath();
+      x.fill();
+    }
+  }
+  // Worn gilding texture over the frame
+  x.save();
+  x.beginPath();
+  x.rect(fx, fy, fw, fh);
+  x.rect(ix, iy, iw, ih);
+  x.clip('evenodd');
+  x.globalAlpha = 0.18;
+  x.globalCompositeOperation = 'multiply';
+  x.drawImage(n, fx, fy, fw, fh);
+  x.restore();
+
+  // Primed linen canvas (gesso) inside the frame
+  x.fillStyle = '#e4dccb';
+  x.fillRect(ix, iy, iw, ih);
+  x.save();
+  x.globalAlpha = 0.09;
+  x.globalCompositeOperation = 'multiply';
+  for (let yy = iy; yy < iy + ih; yy += 2) { x.fillStyle = (yy & 2) ? '#8a7f6a' : '#b4aa94'; x.fillRect(ix, yy, iw, 1); }
+  for (let xx = ix; xx < ix + iw; xx += 3) { x.fillStyle = '#9d927c'; x.fillRect(xx, iy, 1, ih); }
+  x.restore();
+  return c;
+}
+
+function _galleryLightOverlay(x, L) {
+  // Picture light falls off down the canvas; the frame casts a soft shadow at the top edge
+  const g = x.createLinearGradient(0, L.iy, 0, L.iy + L.ih);
+  g.addColorStop(0, 'rgba(255, 236, 205, 0.10)');
+  g.addColorStop(0.35, 'rgba(0, 0, 0, 0)');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0.28)');
+  x.fillStyle = g;
+  x.fillRect(L.ix, L.iy, L.iw, L.ih);
+  const s = Math.max(3, L.border * 0.45);
+  const top = x.createLinearGradient(0, L.iy, 0, L.iy + s);
+  top.addColorStop(0, 'rgba(0,0,0,0.45)');
+  top.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = top;
+  x.fillRect(L.ix, L.iy, L.iw, s);
 }
 
 function drawGallery(ctx, W, H, p, time) {
   if (!GALLERY.initd) galleryReset();
   const isPreview = W < 300;
 
-  // ── background ──
-  ctx.fillStyle = '#0a0a0a';
-  ctx.fillRect(0, 0, W, H);
-
-  // ── draw painting (cover-fit) ──
   if (GALLERY.loaded) {
     const img = GALLERY.image;
-    const imgR = img.width / img.height;
-    const canR = W / H;
-    let dw, dh, dx, dy;
-    if (canR > imgR) { dw = W; dh = W / imgR; dx = 0; dy = (H - dh) / 2; }
-    else             { dh = H; dw = H * imgR; dy = 0; dx = (W - dw) / 2; }
-    ctx.drawImage(img, dx, dy, dw, dh);
+    if (!GALLERY.field) GALLERY.field = _galleryBuildField(img.width / img.height, GALLERY.seed);
+    if (!GALLERY.under) GALLERY.under = _galleryBuildUnder(img);
 
-    // ── Safety net: crossfade entire cover at the end ──
-    // At p=0.95, it's fully opaque. By p=1.0, it's 0.
-    const globalCoverOpacity = p > 0.95 ? 1 - (p - 0.95) * 20 : 1;
-    
-    if (globalCoverOpacity > 0.005) {
-      if (!GALLERY.maskCanvas) {
-        GALLERY.maskCanvas = document.createElement('canvas');
-        GALLERY.maskCtx = GALLERY.maskCanvas.getContext('2d', { willReadFrequently: true });
-      }
-      if (GALLERY.maskCanvas.width !== W || GALLERY.maskCanvas.height !== H) {
-        GALLERY.maskCanvas.width = W;
-        GALLERY.maskCanvas.height = H;
-      }
-      
-      const mCtx = GALLERY.maskCtx;
-      
-      // 1. Fill mask canvas with the frosted cover
-      mCtx.globalCompositeOperation = 'source-over';
-      mCtx.fillStyle = 'rgba(12, 12, 14, 0.88)';
-      mCtx.fillRect(0, 0, W, H);
-      
-      // Subtle sheen on the frosted cover
-      const sheen = mCtx.createLinearGradient(0, 0, W, H);
-      sheen.addColorStop(0, 'rgba(255, 255, 255, 0.06)');
-      sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0.02)');
-      sheen.addColorStop(1, 'rgba(255, 255, 255, 0.04)');
-      mCtx.fillStyle = sheen;
-      mCtx.fillRect(0, 0, W, H);
+    const dpr = (ctx.getTransform ? ctx.getTransform().a : 1) || 1;
+    let C = GALLERY.caches.get(ctx.canvas);
+    if (!C || C.W !== W || C.H !== H || C.dpr !== dpr || C.img !== img) {
+      const L = _galleryLayout(W, H, img);
+      const mk = () => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(L.iw * dpr)); c.height = Math.max(1, Math.round(L.ih * dpr)); return c; };
+      const F = GALLERY.field;
+      const small = document.createElement('canvas');
+      small.width = F.FW; small.height = F.FH;
+      C = {
+        W, H, dpr, img, L,
+        stat: _galleryBuildStatic(L, dpr),
+        underLayer: mk(), colorLayer: mk(),
+        small, smallCtx: small.getContext('2d'), smallData: small.getContext('2d').createImageData(F.FW, F.FH),
+        lastP: -1,
+      };
+      GALLERY.caches.set(ctx.canvas, C);
+    }
+    const L = C.L;
 
-      // 2. Erase holes where blooms have expanded
-      mCtx.globalCompositeOperation = 'destination-out';
-      
-      const N = GALLERY.blobs.length;
-      // We want ~3.5 blobs actively growing at any time
-      const activeWidth = Math.max(0.05, 3.5 / N);
-      
-      for (let i = 0; i < N; i++) {
-        const blob = GALLERY.blobs[i];
-        
-        // Map blob i's growth across the ENTIRE timer so the last one finishes exactly at p=0.99
-        // This guarantees 100% reveal just before the timer UI hits 0:00
-        const startP = (i / Math.max(1, N - 1)) * (0.99 - activeWidth);
-        const endP = startP + activeWidth;
-        
-        let t = 0;
-        if (isPreview) {
-          // In preview, blobs are fully bloomed or hidden based on progress
-          // Speed up the preview reveal so it loops nicely
-          t = (p * 1.5) > (i / N) ? 1 : 0;
-        } else {
-          t = (p - startP) / (endP - startP);
-          t = Math.max(0, Math.min(1, t));
+    // Painting finishes just before the timer reaches 00:00
+    const pc = isPreview ? Math.min(1, p * 1.1) : Math.min(1, p / 0.985);
+
+    // Rebuild the paint masks only when progress has moved enough to matter
+    if (Math.abs(pc - C.lastP) > (isPreview ? 0.01 : 0.0004) || C.lastP < 0) {
+      const F = GALLERY.field;
+      const paintLayer = (layer, source, prog, scale, offset, band) => {
+        const d = C.smallData.data;
+        const f = F.field;
+        const pp = prog * (1 + band);
+        for (let i = 0, j = 3; i < f.length; i++, j += 4) {
+          const fv = f[i] * scale + offset;
+          let a = (pp - fv) / band;
+          a = a < 0 ? 0 : a > 1 ? 1 : a;
+          d[j] = a * 255;
         }
-        
-        if (t > 0) {
-          // Cubic ease-out for a fast start, slow organic finish
-          const ease = 1 - Math.pow(1 - t, 3);
-          
-          const cellW = W / GALLERY.cols;
-          const cellH = H / GALLERY.rows;
-          
-          // Use cellDiag / 2 as base radius so the splatters stay contained mostly to their own cells.
-          // The combined overlap of all cells guarantees 100% geometric coverage without prematurely revealing the screen.
-          const cellDiag = Math.sqrt(cellW * cellW + cellH * cellH);
-          const baseRadius = cellDiag / 2;
-          
-          const bx = blob.x * W;
-          const by = blob.y * H;
-          
-          for (let d = 0; d < blob.drops.length; d++) {
-            const drop = blob.drops[d];
-            const dropR = baseRadius * drop.rMult * ease;
-            
-            if (dropR > 0.5) {
-              // Scale positional offsets by ease so droplets spread outward dynamically!
-              const dropX = bx + drop.dx * baseRadius * ease;
-              const dropY = by + drop.dy * baseRadius * ease;
-              
-              const grad = mCtx.createRadialGradient(dropX, dropY, 0, dropX, dropY, dropR);
-              // Core drop and satellites are solidly opaque for most of their radius to create distinct droplets, 
-              // with just enough soft bleed at the edges to look like watercolor on canvas
-              grad.addColorStop(0, 'rgba(0,0,0,1)');
-              grad.addColorStop(d === 0 ? 0.75 : 0.6, 'rgba(0,0,0,1)');
-              grad.addColorStop(0.9, 'rgba(0,0,0,0.8)');
-              grad.addColorStop(1, 'rgba(0,0,0,0)');
-              
-              mCtx.fillStyle = grad;
-              mCtx.beginPath();
-              mCtx.arc(dropX, dropY, dropR, 0, Math.PI * 2);
-              mCtx.fill();
-            }
-          }
-        }
-      }
-      
-      // 3. Draw the masked cover over the main canvas
-      ctx.save();
-      if (p > 0.95 && !isPreview) {
-        // Fade out any remaining un-splattered frosted glass over the last 5% of the session
-        // This guarantees that exactly at the last second, the painting is 100% visible
-        const fadeP = (p - 0.95) / 0.05; 
-        ctx.globalAlpha = Math.max(0, 1.0 - fadeP);
-      } else {
-        ctx.globalAlpha = 1.0;
-      }
-      ctx.drawImage(GALLERY.maskCanvas, 0, 0);
-      ctx.restore();
+        C.smallCtx.putImageData(C.smallData, 0, 0);
+        const lx = layer.getContext('2d');
+        lx.globalCompositeOperation = 'source-over';
+        lx.clearRect(0, 0, layer.width, layer.height);
+        lx.imageSmoothingEnabled = true;
+        lx.imageSmoothingQuality = 'high';
+        lx.drawImage(C.small, 0, 0, layer.width, layer.height);
+        lx.globalCompositeOperation = 'source-in';
+        lx.drawImage(source, 0, 0, layer.width, layer.height);
+        lx.globalCompositeOperation = 'source-over';
+      };
+      // Tonal underpainting runs ahead (done by ~70%), colour follows
+      paintLayer(C.underLayer, GALLERY.under, pc, 0.70, -0.015, 0.03);
+      paintLayer(C.colorLayer, img, pc, 1.0, 0.0, 0.014);
+      C.lastP = pc;
     }
 
-    // ── subtle vignette on the revealed painting ──
-    const vigCx = W / 2, vigCy = H / 2;
-    const vignette = ctx.createRadialGradient(vigCx, vigCy, Math.min(W, H) * 0.35, vigCx, vigCy, Math.max(W, H) * 0.85);
-    vignette.addColorStop(0, 'transparent');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.35)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(C.stat, 0, 0, W, H);
+    if (pc < 1) ctx.drawImage(C.underLayer, L.ix, L.iy, L.iw, L.ih);
+    ctx.drawImage(C.colorLayer, L.ix, L.iy, L.iw, L.ih);
+    _galleryLightOverlay(ctx, L);
 
-    // ── museum placard (fades in ~1s after last blob finishes, around p=0.98) ──
-    if (!isPreview && p >= 0.98) {
+    // ── Museum label, placed on the wall beneath the frame ──
+    if (!isPreview && p >= 0.985) {
       if (GALLERY.placardShownAt === 0) GALLERY.placardShownAt = time;
-      const elapsed = time - GALLERY.placardShownAt;
-      const placardAlpha = Math.min(1, elapsed / 1.0);  // 1-second fade
-
-      if (placardAlpha > 0.01) {
+      const a = Math.min(1, (time - GALLERY.placardShownAt) / 1.2);
+      if (a > 0.01) {
+        const art = GALLERY.currentArt;
         ctx.save();
-        ctx.globalAlpha = placardAlpha;
-
-        // Placard background — frosted dark panel at bottom-right
-        const pW = Math.min(340, W * 0.45);
-        const pH = 72;
-        const pX = W - pW - 24;
-        const pY = H - pH - 24;
-        const pR = 8; // border-radius
-
-        ctx.beginPath();
-        ctx.moveTo(pX + pR, pY);
-        ctx.lineTo(pX + pW - pR, pY);
-        ctx.quadraticCurveTo(pX + pW, pY, pX + pW, pY + pR);
-        ctx.lineTo(pX + pW, pY + pH - pR);
-        ctx.quadraticCurveTo(pX + pW, pY + pH, pX + pW - pR, pY + pH);
-        ctx.lineTo(pX + pR, pY + pH);
-        ctx.quadraticCurveTo(pX, pY + pH, pX, pY + pH - pR);
-        ctx.lineTo(pX, pY + pR);
-        ctx.quadraticCurveTo(pX, pY, pX + pR, pY);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(10, 10, 12, 0.82)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(212, 168, 83, 0.35)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // Title
+        ctx.globalAlpha = a;
+        const pW = Math.min(280, Math.max(200, L.iw * 0.42));
+        const pH = 62;
+        let pX = L.ix + L.iw - pW;
+        let pY = L.iy + L.ih + L.border + 22;
+        if (pY + pH > H - 16) {
+          // no room below: hang it beside the frame's lower right corner, or inside the wall margin
+          const side = L.ix + L.iw + L.border + 20;
+          if (side + pW < W - 12) { pX = side; pY = L.iy + L.ih + L.border - pH; }
+          else { pY = H - pH - 16; }
+        }
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 4;
+        ctx.fillStyle = 'rgba(236, 230, 218, 0.94)';
+        ctx.fillRect(pX, pY, pW, pH);
+        ctx.shadowColor = 'transparent';
         ctx.textAlign = 'left';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-        ctx.shadowBlur = 4;
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '500 16px Inter';
-        ctx.fillText(GALLERY.currentArt.title, pX + 16, pY + 28);
-
-        // Artist + year
-        ctx.fillStyle = 'rgba(212, 168, 83, 0.9)';
-        ctx.font = '400 12px Inter';
-        ctx.fillText(`${GALLERY.currentArt.artist}, ${GALLERY.currentArt.year}`, pX + 16, pY + 50);
-
+        ctx.fillStyle = '#1b1814';
+        ctx.font = 'italic 17px "Instrument Serif", Georgia, serif';
+        ctx.fillText(art.title, pX + 14, pY + 25, pW - 28);
+        ctx.fillStyle = '#5b5247';
+        ctx.font = '400 11px Inter, sans-serif';
+        ctx.fillText(`${art.artist}, ${art.year}`, pX + 14, pY + 45, pW - 28);
         ctx.restore();
       }
+    } else if (p < 0.98) {
+      GALLERY.placardShownAt = 0;
     }
 
   } else if (GALLERY.error) {
-    // ── error state ──
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = '#121010';
     ctx.fillRect(0, 0, W, H);
     if (!isPreview) {
       ctx.fillStyle = '#555';
@@ -2440,18 +2585,14 @@ function drawGallery(ctx, W, H, p, time) {
     }
   } else {
     // ── loading state: elegant breathing ripple ──
-    ctx.fillStyle = '#0a0a0c'; // Deep elegant background
+    ctx.fillStyle = '#0a0a0c';
     ctx.fillRect(0, 0, W, H);
-    
     if (!isPreview) {
-      // Breathing inner dot
       const alphaInner = 0.3 + 0.4 * Math.sin(time * 2.5);
       ctx.fillStyle = `rgba(212, 168, 83, ${alphaInner})`;
       ctx.beginPath();
       ctx.arc(W / 2, H / 2, 2.5, 0, Math.PI * 2);
       ctx.fill();
-      
-      // Expanding outer ripple
       const r = (time * 18) % 45;
       const alphaOuter = Math.max(0, 1 - (r / 45));
       ctx.strokeStyle = `rgba(212, 168, 83, ${alphaOuter * 0.6})`;
@@ -2459,7 +2600,6 @@ function drawGallery(ctx, W, H, p, time) {
       ctx.beginPath();
       ctx.arc(W / 2, H / 2, 3 + r, 0, Math.PI * 2);
       ctx.stroke();
-
       ctx.fillStyle = 'rgba(255,255,255,0.3)';
       ctx.font = '300 11px Inter';
       ctx.textAlign = 'center';
@@ -2596,86 +2736,169 @@ function tickConfetti() {
 
 /* ==============================================================
    AUDIO — Premium Ambient Soundscapes (file-based)
-     Rain (Water Bowl) -> sounds/rain.wav
-     Fire (Candle)     -> sounds/fire.wav
-     Wind (Tree)       -> sounds/wind.wav
+     Water Bowl -> discrete drop sounds (sounds/floraphonic-…mp3)
+     Candle     -> sounds/fire.mp3
+     Tree       -> sounds/wind.mp3
+     Gallery    -> sounds/slow-piano-music.mp3
 ============================================================== */
-const audioBuffers = {};
+const AMBIENT_SRC = {
+  ice: '',                                  // discrete drop sounds instead
+  candle: 'sounds/fire.mp3',
+  tree: 'sounds/wind.mp3',
+  gallery: 'sounds/slow-piano-music.mp3',
+};
+const DROP_SRC = 'sounds/floraphonic-water-droplet-3-165638.mp3';
+
+const audioBuffers = {};        // decoded (and loop-prepared) buffers by src
+const audioLoads = {};          // in-flight load promises by src
 let audioCtxUnlocked = false;
+let ambientToken = 0;           // bumps on every start/stop so stale loads never play
+
+// iOS: let Web Audio play even when the ringer/silent switch is on (Safari 17+)
+try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
 
 function initAudioCtx() {
   if (!state.audioCtx) {
     state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Recover after interruptions (calls, Siri, other apps taking audio)
+    state.audioCtx.onstatechange = () => {
+      if (state.audioCtx.state !== 'running' && state.soundOn && isSessionAudible()) resumeAudio();
+    };
   }
-  if (state.audioCtx.state === 'suspended') {
-    state.audioCtx.resume();
+  if (state.audioCtx.state !== 'running') {
+    state.audioCtx.resume().catch(() => {});
   }
 }
 
-// iOS/Mobile Safari strict audio policy requires playing a silent buffer on first interaction
+function isSessionAudible() {
+  return !!(screens.focus && screens.focus.classList.contains('active'));
+}
+
+function resumeAudio() {
+  if (!state.audioCtx) return;
+  if (state.audioCtx.state !== 'running') state.audioCtx.resume().catch(() => {});
+}
+
+// Older iOS routes Web Audio through the "ambient" category, which the
+// silent switch mutes. Playing a looping silent media element inside a user
+// gesture switches the page to the "playback" category.
+let silentEl = null;
+function startSilentKeepAlive() {
+  if (silentEl || navigator.audioSession) return;
+  try {
+    const sr = 8000, n = sr; // 1 s of silence, 8-bit mono WAV
+    const buf = new ArrayBuffer(44 + n);
+    const v = new DataView(buf);
+    const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    w(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+    silentEl = new Audio(URL.createObjectURL(new Blob([buf], { type: 'audio/wav' })));
+    silentEl.loop = true;
+    silentEl.setAttribute('playsinline', '');
+    silentEl.play().catch(() => { silentEl = null; });
+  } catch (_) { silentEl = null; }
+}
+
+// Mobile browsers require audio to be started from a user gesture. Play a
+// one-sample buffer on the first interaction (and again if still locked).
 function unlockAudioCtx() {
-  if (audioCtxUnlocked) return;
   initAudioCtx();
+  startSilentKeepAlive();
+  if (audioCtxUnlocked && state.audioCtx.state === 'running') return;
   const ctx = state.audioCtx;
-  
-  const buffer = ctx.createBuffer(1, 1, 22050);
   const source = ctx.createBufferSource();
-  source.buffer = buffer;
+  source.buffer = ctx.createBuffer(1, 1, 22050);
   source.connect(ctx.destination);
   source.start(0);
-  
-  if (ctx.state === 'suspended') {
-    ctx.resume().then(() => { audioCtxUnlocked = true; }).catch(e => console.warn(e));
-  } else {
-    audioCtxUnlocked = true;
-  }
-  
-  // Preload drop sound to ensure perfect timing
+  ctx.resume().then(() => { audioCtxUnlocked = ctx.state === 'running'; }).catch(() => {});
   preloadDropSound();
 }
 
-// Bind unlock to the first user interaction anywhere on the document
-['touchstart', 'click'].forEach(event => {
-  document.body.addEventListener(event, unlockAudioCtx, { once: true, capture: true });
+// Keep trying on interactions until the context is actually running
+['pointerdown', 'touchend', 'click', 'keydown'].forEach(evt => {
+  document.addEventListener(evt, () => {
+    if (!state.audioCtx || state.audioCtx.state !== 'running') unlockAudioCtx();
+  }, { capture: true, passive: true });
 });
 
-let dropSoundPromise = null;
-async function preloadDropSound() {
-  if (dropSoundPromise) return dropSoundPromise;
-  
-  const src = 'sounds/floraphonic-water-droplet-3-165638.mp3';
-  if (audioBuffers[src]) return audioBuffers[src];
-  
-  dropSoundPromise = (async () => {
-    try {
-      initAudioCtx();
-      const ctx = state.audioCtx;
-      const response = await fetch(src);
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = await ctx.decodeAudioData(arrayBuffer);
-      audioBuffers[src] = buffer;
-      return buffer;
-    } catch (e) {
-      console.error('Failed to load drop audio:', e);
-      return null;
+// Coming back to the tab / app: resume, and restart the ambience if it was lost
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !state.soundOn || !isSessionAudible()) return;
+  resumeAudio();
+  if (!state.audioNodes.ambientSource && AMBIENT_SRC[state.vibe]) startAmbient(state.vibe);
+});
+window.addEventListener('pageshow', () => { if (state.soundOn && isSessionAudible()) resumeAudio(); });
+
+// Build a seamless loop: crossfade the tail into the head once, so the
+// buffer can loop natively (no timers — those get throttled in background
+// tabs and Picture-in-Picture, which used to leave the ambience silent).
+function makeLoopBuffer(ctx, buffer, fadeSec) {
+  const fade = Math.min(Math.floor(fadeSec * buffer.sampleRate), Math.floor(buffer.length / 3));
+  if (fade < 64) return buffer;
+  const len = buffer.length - fade;
+  const out = ctx.createBuffer(buffer.numberOfChannels, len, buffer.sampleRate);
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const src = buffer.getChannelData(c);
+    const dst = out.getChannelData(c);
+    dst.set(src.subarray(0, len));
+    for (let i = 0; i < fade; i++) {
+      const t = i / fade;
+      // equal-power: head fades in while the tail fades out over it
+      dst[i] = src[i] * Math.sin(t * Math.PI / 2) + src[len + i] * Math.cos(t * Math.PI / 2);
     }
+  }
+  return out;
+}
+
+function loadAudio(src, loop) {
+  const key = src + (loop ? '#loop' : '');
+  if (audioBuffers[key]) return Promise.resolve(audioBuffers[key]);
+  if (audioLoads[key]) return audioLoads[key];
+  initAudioCtx();
+  const ctx = state.audioCtx;
+  audioLoads[key] = (async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(src);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.arrayBuffer();
+        // Safari's decodeAudioData has a callback-only form on older versions
+        let buf = await new Promise((resolve, reject) => {
+          const p = ctx.decodeAudioData(data, resolve, reject);
+          if (p && p.then) p.then(resolve, reject);
+        });
+        if (loop) buf = makeLoopBuffer(ctx, buf, 2.0);
+        audioBuffers[key] = buf;
+        return buf;
+      } catch (e) {
+        console.warn('Audio load failed (attempt ' + (attempt + 1) + '):', src, e);
+        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+      }
+    }
+    delete audioLoads[key];
+    return null;
   })();
-  
-  return dropSoundPromise;
+  return audioLoads[key];
+}
+
+function preloadDropSound() { return loadAudio(DROP_SRC, false); }
+
+// Warm the cache as soon as a vibe is chosen so sound starts with the session
+function preloadAmbient(vibe) {
+  const src = AMBIENT_SRC[vibe];
+  if (src) loadAudio(src, true);
+  if (vibe === 'ice') preloadDropSound();
 }
 
 async function playDropSound() {
   if (!state.soundOn) return;
   initAudioCtx();
+  const buffer = await preloadDropSound();
+  if (!buffer || !state.soundOn) return;
   const ctx = state.audioCtx;
-  const src = 'sounds/floraphonic-water-droplet-3-165638.mp3';
-  
-  let buffer = audioBuffers[src];
-  if (!buffer) {
-    buffer = await preloadDropSound();
-  }
-  if (!buffer) return;
-  
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   const gain = ctx.createGain();
@@ -2686,121 +2909,66 @@ async function playDropSound() {
 }
 
 function stopAllSound() {
+  ambientToken++;
   state._loadingSrc = null;
   clearTimeout(state._audioTimer);
-  // Stop HTML Audio element (legacy fallback if any)
-  if (state._ambientAudio) {
-    state._ambientAudio.pause();
-    state._ambientAudio.src = '';
-    state._ambientAudio = null;
-  }
   if (state._fadeTimer) { clearInterval(state._fadeTimer); state._fadeTimer = null; }
-
-  // Stop any remaining Web Audio nodes
-  Object.values(state.audioNodes).forEach(n => {
-    try { n.stop && n.stop(); } catch(e) {}
-    try { n.disconnect && n.disconnect(); } catch(e) {}
-  });
+  const ctx = state.audioCtx;
+  const gain = state.audioNodes.ambientGain;
+  const src = state.audioNodes.ambientSource;
+  if (ctx && gain && src) {
+    // quick fade instead of a click
+    try {
+      gain.gain.cancelScheduledValues(ctx.currentTime);
+      gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
+      src.stop(ctx.currentTime + 0.3);
+    } catch (e) { try { src.stop(); } catch (_) {} }
+    setTimeout(() => { try { gain.disconnect(); } catch (_) {} }, 400);
+  } else {
+    Object.values(state.audioNodes).forEach(n => {
+      try { n.stop && n.stop(); } catch (e) {}
+      try { n.disconnect && n.disconnect(); } catch (e) {}
+    });
+  }
   state.audioNodes = {};
 }
 
 function startAmbient(vibe) {
   initAudioCtx();
   stopAllSound();
-
-  let src = '';
-  if (vibe === 'ice')    src = ''; // Discrete drops used instead
-  if (vibe === 'candle') src = 'sounds/fire.wav';
-  if (vibe === 'tree')   src = 'sounds/wind.wav';
-  if (vibe === 'gallery')src = 'sounds/slow-piano-music.mp3';
-  
-  if (src) {
-    state._loadingSrc = src;
-    playAmbientFile(src);
-  }
+  const src = AMBIENT_SRC[vibe];
+  if (vibe === 'ice') preloadDropSound();
+  if (!src) return;
+  state._loadingSrc = src;
+  playAmbientFile(src, ambientToken);
 }
 
-async function playAmbientFile(src) {
-  initAudioCtx();
+async function playAmbientFile(src, token) {
+  const buffer = await loadAudio(src, true);
+  // Sound turned off, or another ambience started, while loading
+  if (!buffer || token !== ambientToken || !state.soundOn) return;
   const ctx = state.audioCtx;
-  
-  let buffer = audioBuffers[src];
-  if (!buffer) {
-    try {
-      const response = await fetch(src);
-      const arrayBuffer = await response.arrayBuffer();
-      buffer = await ctx.decodeAudioData(arrayBuffer);
-      audioBuffers[src] = buffer;
-    } catch (e) {
-      console.error('Failed to load audio:', src, e);
-      return;
-    }
-  }
-  
-  // If sound was turned off while loading, or if another sound was started
-  if (!state.soundOn || state._loadingSrc !== src) {
-     return;
-  }
+  resumeAudio();
 
-  // Master gain for overall fade in/out
   const masterGain = ctx.createGain();
   masterGain.gain.value = 0;
   masterGain.connect(ctx.destination);
-  state.audioNodes['ambientGain'] = masterGain;
 
-  // Seamless Crossfade Looper
-  const CROSSFADE_TIME = 2.0; // seconds
-  let nextStartTime = ctx.currentTime;
-  let sourceIndex = 0;
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  source.connect(masterGain);
+  source.start();
+  source.onended = () => {
+    // If the loop ever stops unexpectedly mid-session, bring it back
+    if (token === ambientToken && state.soundOn && isSessionAudible()) startAmbient(state.vibe);
+  };
 
-  function scheduleNext() {
-    if (state._loadingSrc !== src || !state.soundOn) return;
-    
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    
-    const sourceGain = ctx.createGain();
-    sourceGain.gain.value = 0;
-    
-    source.connect(sourceGain);
-    sourceGain.connect(masterGain);
-    
-    const duration = buffer.duration;
-    // if duration is too short for crossfade, adjust
-    const fadeTime = Math.min(CROSSFADE_TIME, duration / 2);
-    
-    // Fade in
-    sourceGain.gain.setValueAtTime(0, nextStartTime);
-    sourceGain.gain.linearRampToValueAtTime(1, nextStartTime + fadeTime);
-    
-    // Fade out
-    const stopTime = nextStartTime + duration;
-    sourceGain.gain.setValueAtTime(1, stopTime - fadeTime);
-    sourceGain.gain.linearRampToValueAtTime(0, stopTime);
-    
-    source.start(nextStartTime);
-    source.stop(stopTime);
-    
-    // Save to node list so we can disconnect/stop if needed
-    const nodeId = 'src_' + (sourceIndex++);
-    state.audioNodes[nodeId] = source;
-    
-    source.onended = () => {
-      try { source.disconnect(); } catch(e) {}
-      try { sourceGain.disconnect(); } catch(e) {}
-      delete state.audioNodes[nodeId];
-    };
-    
-    nextStartTime = stopTime - fadeTime;
-    
-    // Schedule next loop 2 seconds before it needs to start
-    const timeUntilNext = (nextStartTime - ctx.currentTime - 2) * 1000;
-    state._audioTimer = setTimeout(scheduleNext, Math.max(0, timeUntilNext));
-  }
-  
-  scheduleNext();
-  
-  // Fade in master smoothly
+  state.audioNodes.ambientGain = masterGain;
+  state.audioNodes.ambientSource = source;
+
+  // Fade in smoothly
   masterGain.gain.setValueAtTime(0, ctx.currentTime);
   masterGain.gain.linearRampToValueAtTime(0.85, ctx.currentTime + 3);
 }
