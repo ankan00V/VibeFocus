@@ -693,7 +693,6 @@ function onSessionComplete() {
     gtag('event', 'session_completed', { vibe: state.vibe, duration_minutes: state.minutes });
   }
 
-  completeStat.textContent = state.minutes + (state.minutes === 1 ? ' minute' : ' minutes');
   
   // Add fallback state classes for complete screen and body
   const completeScreen = document.getElementById('screen-complete');
@@ -709,10 +708,114 @@ function onSessionComplete() {
     bodyEl.classList.add('vibe-selected-' + state.vibe);
   }
 
+  prepareFinishScreen();
+
   goTo('complete').then(() => {
     resizeConfettiCanvas();
     burstConfetti();
     startCompleteLoop();
+    playFinishEntrance();
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   Finish screen — "a postcard from your session"
+══════════════════════════════════════════════════════════ */
+const FINISH_VIBE_NAMES = { candle: 'Candle', ice: 'Water Bowl', tree: 'Tree', gallery: 'Gallery' };
+const finishScreen = document.getElementById('screen-complete');
+const finishVideo = finishScreen ? finishScreen.querySelector('.cz-video') : null;
+const finishReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+/* Today's tally lives in localStorage; it is a nicety, so every access is guarded */
+function recordFinishedSession(minutes) {
+  const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+  let log = { date: today, sessions: 0, minutes: 0 };
+  try {
+    const saved = JSON.parse(localStorage.getItem('vf-today') || 'null');
+    if (saved && saved.date === today) log = saved;
+  } catch (e) { /* storage unavailable: count this session only */ }
+  log.sessions += 1;
+  log.minutes += minutes;
+  try { localStorage.setItem('vf-today', JSON.stringify(log)); } catch (e) {}
+  return log;
+}
+
+function prepareFinishScreen() {
+  if (!finishScreen) return;
+  const minutes = state.minutes || Math.round((state.totalSeconds || 0) / 60);
+  const today = recordFinishedSession(minutes);
+  const now = new Date();
+  const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+
+  set('cz-minutes', String(minutes));
+  set('complete-time-display', minutes === 1 ? 'minute' : 'minutes');
+  set('cz-today', today.sessions + (today.sessions === 1 ? ' session' : ' sessions'));
+  set('cz-today-min', today.minutes + ' min');
+  set('cz-finished', now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+  set('cz-caption', (FINISH_VIBE_NAMES[state.vibe] || 'Focus') + ' · ' +
+    now.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }));
+
+  finishScreen.classList.remove('cz-done');
+  if (!finishReducedMotion && typeof finishScreen.animate === 'function') finishScreen.classList.add('cz-pre');
+}
+
+function playFinishVideo() {
+  if (!finishVideo || finishReducedMotion) return;
+  if (!finishVideo.src && finishVideo.dataset.src) {
+    const small = window.matchMedia && window.matchMedia('(max-width: 820px)').matches;
+    finishVideo.src = (small && finishVideo.dataset.srcSmall) || finishVideo.dataset.src;
+    finishVideo.addEventListener('playing', () => finishVideo.classList.add('is-playing'), { once: true });
+  }
+  finishVideo.muted = true;
+  const p = finishVideo.play();
+  if (p && p.catch) p.catch(() => {});
+}
+
+function playFinishEntrance() {
+  if (!finishScreen) return;
+  playFinishVideo();
+  const done = () => { finishScreen.classList.remove('cz-pre'); finishScreen.classList.add('cz-done'); };
+  if (!finishScreen.classList.contains('cz-pre')) { done(); return; }
+
+  const outExpo = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  const spring = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
+  const frames = {
+    drop:   [{ opacity: 0, transform: 'translateY(-40px) rotate(-9deg) scale(0.94)' }, { opacity: 1, transform: 'translateY(0) rotate(-2.4deg) scale(1)' }],
+    spring: [{ opacity: 0, transform: 'translateY(34px) scale(0.97)', filter: 'blur(8px)' }, { opacity: 1, transform: 'translateY(0) scale(1)', filter: 'blur(0px)' }],
+    pop:    [{ opacity: 0, transform: 'scale(0.6)' }, { opacity: 1, transform: 'scale(1)' }],
+    rise:   [{ opacity: 0, transform: 'translateY(18px)' }, { opacity: 1, transform: 'translateY(0)' }],
+    fade:   [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }],
+  };
+  const timing = { drop: [0, 900, spring], spring: [180, 850, spring], fade: [300, 550, outExpo], pop: [420, 700, spring], rise: [0, 650, outExpo] };
+  let riseIndex = 0;
+  finishScreen.querySelectorAll('.cz-in').forEach(el => {
+    const kind = el.dataset.in || 'rise';
+    let [delay, duration, easing] = timing[kind] || timing.rise;
+    if (kind === 'rise') { delay = el.classList.contains('cz-kicker') ? 80 : 560 + riseIndex++ * 90; }
+    el.animate(frames[kind] || frames.rise, { delay, duration, easing, fill: 'backwards' });
+  });
+  done();
+}
+
+/* Leave the finish screen cleanly (animation loop, confetti, backdrop video) */
+function leaveFinishScreen() {
+  if (completeAnimationId) {
+    cancelAnimationFrame(completeAnimationId);
+    completeAnimationId = null;
+  }
+  cancelAnimationFrame(state.confettiRaf);
+  state.confettiRaf = null;
+  if (finishVideo && !finishVideo.paused) finishVideo.pause();
+}
+
+const btnFocusAgain = document.getElementById('btn-focus-again');
+if (btnFocusAgain) {
+  btnFocusAgain.addEventListener('click', () => {
+    const vibe = state.vibe;
+    leaveFinishScreen();
+    clearVibeSelectedClasses();
+    const idx = HERO_VIBES.findIndex(v => v.vibe === vibe);
+    startHeroFocusSession(idx >= 0 ? idx : 0);
   });
 }
 
@@ -851,12 +954,7 @@ if (btnPip && pipVideo) {
 
 /* ── Restart ── */
 btnRestart.addEventListener('click', () => {
-  if (completeAnimationId) {
-    cancelAnimationFrame(completeAnimationId);
-    completeAnimationId = null;
-  }
-  cancelAnimationFrame(state.confettiRaf);
-  state.confettiRaf = null;
+  leaveFinishScreen();
   clearVibeSelectedClasses();
   goTo('hero');
 });
@@ -2669,7 +2767,8 @@ previewRaf = requestAnimationFrame(animatePreviews);
 /* ══════════════════════════════════════════════════════════
    CONFETTI (subtle, premium — on completion)
 ══════════════════════════════════════════════════════════ */
-const CONFETTI_COLORS = ['#6e63f5','#a78bfa','#7dd3f5','#f59e42','#6ee7b7','#f472b6','#facc15'];
+// Leaf & petal palette to match the hillside screens
+const CONFETTI_COLORS = ['#ffffff','#fff3c4','#ffd76a','#9ed36a','#5b875c','#f6b8c8','#cfe8a9'];
 
 function burstConfetti() {
   state.confettiParts = [];
