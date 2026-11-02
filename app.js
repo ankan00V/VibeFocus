@@ -28,11 +28,13 @@
   }
 })();
 
-/* ── PiP Proxy (Fixes Safari WebGL captureStream bugs) ── */
+/* ── PiP Proxy (Fixes Safari WebGL captureStream bugs) ──
+   A 2D canvas that mirrors the active visual plus the countdown; its
+   captureStream feeds the hidden <video> that is shown in Picture-in-Picture. */
 const pipProxyCanvas = document.createElement('canvas');
 pipProxyCanvas.id = 'pip-proxy-canvas';
-pipProxyCanvas.width = 1280;
-pipProxyCanvas.height = 720;
+pipProxyCanvas.width = 960;
+pipProxyCanvas.height = 540;
 // Make it part of the render tree but invisible so Safari captureStream works
 pipProxyCanvas.style.position = 'fixed';
 pipProxyCanvas.style.top = '-9999px';
@@ -40,7 +42,7 @@ pipProxyCanvas.style.left = '-9999px';
 pipProxyCanvas.style.pointerEvents = 'none';
 const pipProxyCtx = pipProxyCanvas.getContext('2d', { alpha: false });
 pipProxyCtx.fillStyle = '#000';
-pipProxyCtx.fillRect(0, 0, 1280, 720);
+pipProxyCtx.fillRect(0, 0, pipProxyCanvas.width, pipProxyCanvas.height);
 // Some browsers require the canvas in the DOM for captureStream
 document.addEventListener('DOMContentLoaded', () => document.body.appendChild(pipProxyCanvas));
 
@@ -517,6 +519,8 @@ btnStart.addEventListener('click', () => {
   // BEFORE any async/await boundaries, so the user gesture token is preserved.
   if (pipVideo && typeof pipProxyCanvas.captureStream === 'function') {
     try {
+      sizePipProxy();
+      paintPipProxy(fmt(state.totalSeconds), performance.now(), true);
       if (!pipVideo.srcObject) {
         pipVideo.srcObject = pipProxyCanvas.captureStream(30);
       }
@@ -567,6 +571,65 @@ async function launchFocus() {
   showHud();
 }
 
+function isPipActive() {
+  return !!pipVideo && (document.pictureInPictureElement === pipVideo ||
+    pipVideo.webkitPresentationMode === 'picture-in-picture');
+}
+
+// Match the PiP window to the screen shape (portrait phones get a portrait
+// window), within the aspect range browsers accept for PiP.
+function sizePipProxy() {
+  const a = Math.max(9 / 16, Math.min(16 / 9, window.innerWidth / Math.max(1, window.innerHeight)));
+  const w = a >= 1 ? 960 : Math.round(960 * a);
+  const h = a >= 1 ? Math.round(960 / a) : 960;
+  if (pipProxyCanvas.width !== w || pipProxyCanvas.height !== h) {
+    pipProxyCanvas.width = w;
+    pipProxyCanvas.height = h;
+  }
+}
+
+let _lastPipPaint = 0;
+function paintPipProxy(timeStr, now, force = false) {
+  const active = isPipActive();
+  // Full rate while in PiP; a light 4 fps keep-alive otherwise
+  if (!force && !active && now - _lastPipPaint < 250) return;
+  _lastPipPaint = now;
+
+  let src = focusCanvas;
+  if (state.vibe === 'ice') src = document.getElementById('water-bowl-canvas');
+  if (state.vibe === 'tree') src = document.getElementById('tree-canvas');
+  if (state.vibe === 'candle') src = document.getElementById('candle-canvas');
+  const W = pipProxyCanvas.width, H = pipProxyCanvas.height;
+  const x = pipProxyCtx;
+  try {
+    x.fillStyle = '#000';
+    x.fillRect(0, 0, W, H);
+    if (src && src.width > 0 && src.height > 0) {
+      // cover-fit so the visual fills the PiP window
+      const sa = src.width / src.height, pa = W / H;
+      let sw = src.width, sh = src.height, sx = 0, sy = 0;
+      if (sa > pa) { sw = src.height * pa; sx = (src.width - sw) / 2; }
+      else { sh = src.width / pa; sy = (src.height - sh) / 2; }
+      x.drawImage(src, sx, sy, sw, sh, 0, 0, W, H);
+    }
+    // Countdown pill
+    const fs = Math.round(Math.min(W, H) * 0.075);
+    const pw = fs * 4.2, ph = fs * 1.7;
+    const px = (W - pw) / 2, py = H - ph - Math.min(W, H) * 0.06;
+    x.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    x.beginPath();
+    if (x.roundRect) x.roundRect(px, py, pw, ph, ph / 2); else x.rect(px, py, pw, ph);
+    x.fill();
+    x.fillStyle = '#fff';
+    x.font = `500 ${fs}px Inter, -apple-system, sans-serif`;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText(timeStr, W / 2, py + ph / 2 + 1);
+  } catch (err) {
+    console.warn('PiP proxy canvas draw failed:', err);
+  }
+}
+
 function tickFocus(now) {
   // Mobile frame throttle: skip frame if not enough time has passed
   if (IS_MOBILE && now - _lastFocusFrame < TARGET_FRAME_MS) {
@@ -595,65 +658,10 @@ function tickFocus(now) {
   hudFill.style.width = (prog * 100).toFixed(2) + '%';
   hudFill.setAttribute('aria-valuenow', Math.round(prog * 100));
 
-  // Draw timer directly on canvas if PiP is active
-  const isPipActive = document.pictureInPictureElement === pipVideo || 
-                     (pipVideo.webkitPresentationMode === "picture-in-picture");
-                     
-  if (isPipActive) {
-    focusCtx.save();
-    focusCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    focusCtx.beginPath();
-    focusCtx.roundRect((focusCanvas.width / RENDER_DPR) / 2 - 60, (focusCanvas.height / RENDER_DPR) - 60, 120, 40, 20);
-    focusCtx.fill();
-    
-    focusCtx.fillStyle = '#ffffff';
-    focusCtx.font = '24px "Inter", sans-serif';
-    focusCtx.textAlign = 'center';
-    focusCtx.textBaseline = 'middle';
-    focusCtx.fillText(timeStr, (focusCanvas.width / RENDER_DPR) / 2, (focusCanvas.height / RENDER_DPR) - 40);
-    focusCtx.restore();
-    
-    // Copy the active WebGL canvas to our 2D proxy to fix Safari PiP blank stream bugs
-    let activeCanvas = focusCanvas;
-    if (state.vibe === 'ice') activeCanvas = document.getElementById('water-bowl-canvas');
-    if (state.vibe === 'tree') activeCanvas = document.getElementById('tree-canvas');
-    if (state.vibe === 'candle') activeCanvas = document.getElementById('candle-canvas');
-    
-    if (activeCanvas && activeCanvas.width > 0 && activeCanvas.height > 0) {
-      try {
-        pipProxyCtx.fillStyle = '#000';
-        pipProxyCtx.fillRect(0, 0, pipProxyCanvas.width, pipProxyCanvas.height);
-        
-        // Calculate aspect-ratio-preserving dimensions
-        const proxyAspect = pipProxyCanvas.width / pipProxyCanvas.height;
-        const activeAspect = activeCanvas.width / activeCanvas.height;
-        
-        let drawW = pipProxyCanvas.width;
-        let drawH = pipProxyCanvas.height;
-        let drawX = 0;
-        let drawY = 0;
-        
-        if (activeAspect > proxyAspect) {
-          // Source is wider
-          drawH = pipProxyCanvas.width / activeAspect;
-          drawY = (pipProxyCanvas.height - drawH) / 2;
-        } else {
-          // Source is taller
-          drawW = pipProxyCanvas.height * activeAspect;
-          drawX = (pipProxyCanvas.width - drawW) / 2;
-        }
-        
-        pipProxyCtx.drawImage(activeCanvas, 0, 0, activeCanvas.width, activeCanvas.height, drawX, drawY, drawW, drawH);
-        
-        // If using a 3D canvas, draw the focusCanvas (which has the timer text) on top
-        if (activeCanvas !== focusCanvas && focusCanvas.width > 0 && focusCanvas.height > 0) {
-          pipProxyCtx.drawImage(focusCanvas, 0, 0, focusCanvas.width, focusCanvas.height, drawX, drawY, drawW, drawH);
-        }
-      } catch (err) {
-        console.warn('PiP proxy canvas draw failed:', err);
-      }
-    }
-  }
+  // Keep the Picture-in-Picture feed live for the whole session. Mobile
+  // browsers only allow PiP on a video that already has frames when the
+  // user taps, so the feed must not wait until PiP is active.
+  paintPipProxy(timeStr, now);
 
   if (elapsed >= state.totalSeconds) {
     onSessionComplete();
@@ -792,24 +800,51 @@ if (btnFullscreenToggle) {
 }
 
 /* ── Picture-in-Picture (Widget) ── */
+function pipSupported() {
+  if (!pipVideo || typeof pipProxyCanvas.captureStream !== 'function') return false;
+  if (document.pictureInPictureEnabled && typeof pipVideo.requestPictureInPicture === 'function') return true;
+  return typeof pipVideo.webkitSupportsPresentationMode === 'function' &&
+         pipVideo.webkitSupportsPresentationMode('picture-in-picture');
+}
+
 if (btnPip && pipVideo) {
+  // Hide the button where PiP can't work rather than leaving a dead control
+  if (!pipSupported()) btnPip.style.display = 'none';
+
   btnPip.addEventListener('click', () => {
     try {
-      if (document.pictureInPictureElement) {
-        document.exitPictureInPicture().catch(console.warn);
-      } else if (pipVideo.webkitSupportsPresentationMode && typeof pipVideo.webkitSetPresentationMode === "function") {
-        pipVideo.webkitSetPresentationMode(pipVideo.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture");
-      } else {
-        if (pipVideo.readyState >= 1) {
-          pipVideo.requestPictureInPicture().catch(console.warn);
-        } else {
-          // Fallback if somehow not ready
-          pipVideo.onloadedmetadata = () => pipVideo.requestPictureInPicture().catch(console.warn);
-        }
+      if (isPipActive()) {
+        if (document.pictureInPictureElement) document.exitPictureInPicture().catch(console.warn);
+        else pipVideo.webkitSetPresentationMode('inline');
+        return;
+      }
+      // Make sure the feed is attached and has a fresh frame — synchronously,
+      // so the tap still counts as the user gesture PiP requires.
+      if (!pipVideo.srcObject) pipVideo.srcObject = pipProxyCanvas.captureStream(30);
+      paintPipProxy(hudTime.textContent || '', performance.now(), true);
+      if (pipVideo.paused) pipVideo.play().catch(() => {});
+
+      if (document.pictureInPictureEnabled && typeof pipVideo.requestPictureInPicture === 'function') {
+        pipVideo.requestPictureInPicture().catch(err => {
+          console.warn('PiP request failed:', err);
+          // One retry once the video has data (some browsers need a frame first)
+          if (pipVideo.readyState < 2) {
+            pipVideo.addEventListener('loadeddata', () => {
+              pipVideo.requestPictureInPicture().catch(console.warn);
+            }, { once: true });
+          }
+        });
+      } else if (typeof pipVideo.webkitSetPresentationMode === 'function') {
+        pipVideo.webkitSetPresentationMode('picture-in-picture');
       }
     } catch (err) {
       console.warn('PiP failed or unsupported', err);
     }
+  });
+
+  // Leaving PiP from the system controls should not stop the session feed
+  pipVideo.addEventListener('leavepictureinpicture', () => {
+    if (pipVideo.paused) pipVideo.play().catch(() => {});
   });
 }
 
