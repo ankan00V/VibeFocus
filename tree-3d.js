@@ -623,13 +623,32 @@ function frameTreeCamera(aspect) {
     treeCamera.aspect = aspect;
     const tanV = Math.tan(THREE.MathUtils.degToRad(treeCamera.fov / 2));
     const contentH = 34;  // ground line to above the crown
-    const contentW = 44;  // crown width plus some meadow
+    const contentW = aspect < 0.85 ? 30 : 44;  // crown width (+ meadow on wide screens)
     const dist = Math.max((contentH / 2) / tanV, (contentW / 2) / (tanV * aspect));
     const target = new THREE.Vector3(0, 13, 0);
     treeCamera.position.set(0, target.y + dist * 0.12, dist);
     treeCamera.lookAt(target);
+    // Phones (portrait): lift the subject a little so it sits clear of the
+    // HUD and the home indicator at the bottom of the screen
+    if (aspect < 0.85) {
+        const vw = 1000 * aspect;
+        treeCamera.setViewOffset(vw, 1000, 0, 80, vw, 1000);
+    } else if (treeCamera.view && treeCamera.view.enabled) {
+        treeCamera.clearViewOffset();
+    }
     treeCamera.updateProjectionMatrix();
 }
+
+// True once every leaf has fallen and come to rest on the ground
+function isTreeSettled() {
+    if (!isTreeInitialized) return true;
+    for (let i = 0; i < activeLeafCount; i++) {
+        const leaf = leafData[i];
+        if (leaf.attached || !leaf.grounded) return false;
+    }
+    return true;
+}
+window.isTreeSettled = isTreeSettled;
 
 function resetTree3D() {
     if (!isTreeInitialized) return;
@@ -716,11 +735,9 @@ function renderTree3D(progress, totalSeconds) {
         bloomedCount = 0;
     }
 
-    // Scale progress so that 100% of leaves are dropped 2 seconds BEFORE the timer hits 0
-    // This gives the last leaf time to fall to the ground while the timer is still running
-    const timeElapsed = progress * totalSeconds;
-    const targetDetachmentTime = Math.max(1, totalSeconds - 2);
-    const effectiveProgress = Math.min(1.0, timeElapsed / targetDetachmentTime);
+    // Leaves detach in step with the timer; the very last leaf lets go exactly
+    // at 00:00 (the focus screen then waits for it to land).
+    const effectiveProgress = Math.min(1.0, Math.max(0, progress));
 
     // Update leaves
     const idealDropped = Math.floor(effectiveProgress * activeLeafCount);
@@ -755,17 +772,17 @@ function renderTree3D(progress, totalSeconds) {
             // Only drop 1 leaf at a time so the visual cadence matches the math exactly
             dropsThisFrame = 1;
 
-            // Calculate mathematically perfect gap to pace the leaves evenly over the remaining time
+            // Pace evenly; slightly quicker than the mean rate so the queue never
+            // lags behind the timer (leaves are only queued once their time has come)
             let baseGap = totalSeconds / activeLeafCount;
             if (baseGap > 3.0) baseGap = 3.0; // Strictly ensure we NEVER wait more than 3 seconds!
-            
-            // Apply very slight natural randomness (±10%) so it doesn't look purely mechanical
-            let gap = baseGap * (0.9 + Math.random() * 0.2);
-            
-            // To guarantee the tree is empty by the last second, we only break the rule at the very end.
-            if (effectiveProgress >= 0.95) {
-                gap = 0.2; // Fast flush at the 95% mark
-                dropsThisFrame = Math.min(15, detachmentQueue);
+            let gap = baseGap * (0.8 + Math.random() * 0.15);
+            // A backlog (e.g. after the tab was hidden) catches up quickly
+            if (detachmentQueue > 3) gap = Math.min(gap, 0.25);
+            // At 00:00 anything still queued lets go now — the last leaf falls at zero
+            if (effectiveProgress >= 1.0) {
+                gap = 0;
+                dropsThisFrame = detachmentQueue;
             }
             
             nextClusterTime = time + gap;

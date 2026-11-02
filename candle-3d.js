@@ -960,6 +960,14 @@ function frameCamera(H, isCeremony, time) {
         Math.cos(drift) * dist * Math.cos(elev)
     );
     cam.lookAt(0, targetY, 0);
+    // Phones (portrait): lift the subject a little so it sits clear of the
+    // HUD and the home indicator at the bottom of the screen
+    if (aspect < 0.85) {
+        const vw = 1000 * aspect;
+        cam.setViewOffset(vw, 1000, 0, 80, vw, 1000);
+    } else if (cam.view && cam.view.enabled) {
+        cam.clearViewOffset();
+    }
 }
 
 /* ════════════════════════════════════════════════════════════
