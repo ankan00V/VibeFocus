@@ -81,19 +81,20 @@
   display: block;
   object-fit: cover;
 }
-/* Video was rendered square from the plate mirror-padded 120/1920 top & bottom */
+/* Re-encoded from the square source with its mirror padding cropped off,
+   so it is 9:8 like the plate and simply covers it. */
 .lp-video {
   position: absolute;
-  left: 0;
-  top: -6.25%;
+  inset: 0;
   width: 100%;
-  height: 112.5%;
-  object-fit: fill;
+  height: 100%;
+  object-fit: cover;
   display: block;
   opacity: 0;
   transition: opacity 0.6s ease;
 }
 .lp-video.is-playing { opacity: 1; }
+
 
 /* Everything else sits above the scene */
 .lp-nav, .lp-copy, .lp-vibes, .lp-foot { position: relative; z-index: 1; }
@@ -163,6 +164,16 @@
 
 /* ── Copy ───────────────────────────────────────────────── */
 .lp-copy { position: absolute; inset: 0; pointer-events: none; }
+.lp-copy::before {
+  content: '';
+  position: absolute;
+  left: calc(260 * var(--u));
+  right: calc(260 * var(--u));
+  top: calc(150 * var(--u));
+  height: calc(580 * var(--u));
+  background: radial-gradient(closest-side, rgba(36, 86, 146, 0.22), rgba(36, 86, 146, 0));
+  pointer-events: none;
+}
 .lp-copy > * { pointer-events: auto; }
 
 .lp-kicker, .lp-headline, .lp-sub {
@@ -200,7 +211,7 @@
   font-size: calc(21.2 * var(--u));
   line-height: calc(27 * var(--u));
   font-weight: 400;
-  text-shadow: 0 calc(1 * var(--u)) calc(10 * var(--u)) rgba(28, 70, 120, 0.3);
+  text-shadow: 0 1px 2px rgba(20, 60, 110, 0.35), 0 calc(2 * var(--u)) calc(14 * var(--u)) rgba(20, 60, 110, 0.4);
 }
 
 .lp-actions {
@@ -244,6 +255,7 @@
   font-weight: 500 !important;
   font-size: calc(19.5 * var(--u)) !important;
   white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(40, 70, 40, 0.35);
 }
 .lp-play {
   width: calc(22 * var(--u));
@@ -277,40 +289,20 @@
   color: #fff;
   text-shadow: 0 calc(2 * var(--u)) calc(12 * var(--u)) rgba(28, 70, 120, 0.28);
 }
-.lp-vibes-link {
-  position: absolute;
-  right: calc(132 * var(--u)); /* right-aligned to x = 1308 */
-  top: calc(870.6 * var(--u));
-  display: inline-flex;
-  align-items: center;
-  gap: calc(4 * var(--u));
-  font-size: calc(22 * var(--u)) !important;
-  line-height: calc(22 * var(--u)) !important;
-  font-weight: 500 !important;
-  white-space: nowrap;
-  text-shadow: 0 calc(1 * var(--u)) calc(10 * var(--u)) rgba(28, 70, 120, 0.3);
-}
-.lp-chev {
-  width: calc(20 * var(--u));
-  height: calc(20 * var(--u));
-  transition: transform 0.25s var(--ease-out);
-}
-.lp-vibes-link:hover .lp-chev { transform: translateX(calc(4 * var(--u))); }
-
 .lp-cards {
   list-style: none;
   margin: 0;
   padding: 0;
-}
-.lp-cards > li {
   position: absolute;
+  left: calc(133 * var(--u));
   top: calc(913 * var(--u));
-  width: calc(378 * var(--u));
+  width: calc(1175 * var(--u));   /* 133 → 1308, the row's original span */
   height: calc(273 * var(--u));
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: calc(20 * var(--u));
 }
-.lp-cards > li:nth-child(1) { left: calc(133 * var(--u)); }
-.lp-cards > li:nth-child(2) { left: calc(531 * var(--u)); }
-.lp-cards > li:nth-child(3) { left: calc(929 * var(--u)); }
+.lp-cards > li { min-width: 0; height: 100%; }
 
 .lp-card {
   position: relative;
@@ -332,11 +324,17 @@
   object-fit: cover;
   transition: transform 0.6s var(--ease-out);
 }
+/* Candle art: a crop of the scene plate (the far valley, right side) */
+.lp-card-art--valley img {
+  object-position: 100% 62%;
+  transform-origin: 100% 62%;
+  scale: 2.6;
+}
 .lp-card::after {
   content: '';
   position: absolute;
-  inset: 45% 0 0 0;
-  background: linear-gradient(to top, rgba(18, 38, 22, 0.55), rgba(18, 38, 22, 0));
+  inset: 38% 0 0 0;
+  background: linear-gradient(to top, rgba(14, 34, 18, 0.72), rgba(14, 34, 18, 0.28) 55%, rgba(14, 34, 18, 0));
   pointer-events: none;
 }
 .lp-card-foot {
@@ -373,6 +371,8 @@
   box-shadow: 0 calc(18 * var(--u)) calc(40 * var(--u)) rgba(30, 60, 30, 0.28), 0 calc(3 * var(--u)) calc(8 * var(--u)) rgba(30, 60, 30, 0.14);
 }
 .lp-card:hover .lp-card-art img { transform: scale(1.05); }
+
+.lp-card.is-nudged { box-shadow: 0 0 0 calc(3 * var(--u)) rgba(255, 255, 255, 0.9), 0 calc(14 * var(--u)) calc(34 * var(--u)) rgba(30, 60, 30, 0.28); }
 
 /* ── Footer ─────────────────────────────────────────────── */
 .lp-foot {
@@ -452,21 +452,29 @@ body:has(#screen-hero.active) .global-linkedin-btn { display: none !important; }
   .lp-btn-ghost { height: 52px; min-width: 0; font-size: 17px !important; padding: 0 22px 0 18px; }
   .lp-btn-ghost .lp-play { width: 18px; height: 18px; }
 
+  .lp-copy { position: relative; isolation: isolate; }
+  .lp-copy::before {
+    z-index: -1;
+    left: -20%;
+    right: -20%;
+    top: 30px;
+    height: 640px;
+    background: radial-gradient(closest-side, rgba(30, 78, 138, 0.45), rgba(30, 78, 138, 0));
+  }
+  .lp-sub { text-shadow: 0 1px 2px rgba(15, 50, 95, 0.55), 0 2px 16px rgba(15, 50, 95, 0.5); }
   .lp-vibes {
     margin-top: auto;
     padding-top: 56px;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: baseline;
-    row-gap: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
   }
-  .lp-vibes-title, .lp-vibes-link { position: static; }
-  .lp-vibes-title { padding-left: 16px; font-size: 24px; line-height: 1.1; }
-  .lp-vibes-link { padding-right: 16px; font-size: 15px !important; line-height: 1.2 !important; }
-  .lp-chev { width: 16px; height: 16px; }
+  .lp-vibes-title { position: static; padding-left: 16px; font-size: 24px; line-height: 1.1; }
 
   .lp-cards {
-    grid-column: 1 / -1;
+    position: static;
+    width: auto;
+    height: auto;
     display: flex;
     gap: 12px;
     overflow-x: auto;
@@ -512,10 +520,3 @@ body:has(#screen-hero.active) .global-linkedin-btn { display: none !important; }
   .lp-js .lp-enter { opacity: 1; }
 }
 
-/* Vibe picker (reached from "browse all vibes"): way back home */
-#screen-vibe .vibe-back {
-  position: absolute;
-  top: 1.5rem;
-  left: 1.5rem;
-  z-index: 2;
-}
