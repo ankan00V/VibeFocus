@@ -30,7 +30,7 @@ A calming leaf-fall simulation.
 
 ### 🎨 Painting (Gallery) Mode
 An interactive art experience.
-* **How it works:** Instead of physics animations, this mode slowly unveils a gallery of classic masterworks (Monet, Van Gogh, Vermeer) as you focus. It is accompanied by slow, calming piano music, offering an elegant visual and auditory reward.
+* **How it works:** Instead of physics animations, this mode slowly unveils a gallery of classic masterworks (Monet, Van Gogh, Renoir, Raphael) as you focus. It is accompanied by slow, calming piano music, offering an elegant visual and auditory reward.
 
 ## How to Use VibeFocus
 

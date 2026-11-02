@@ -2094,10 +2094,11 @@ function drawLeaf(ctx, x, y, size, color, rot, alpha) {
 }
 
 /* ══════════════════════════════════════════════════════════
-   GALLERY — Organic Ink Bloom Reveal
-   A painting is covered by a frosted layer. Over the session,
-   soft overlapping "ink blooms" (radial gradients) grow
-   randomly across the canvas to reveal the painting underneath.
+   GALLERY — The painting is painted in over the session
+   A framed canvas hangs on a gallery wall under a picture light.
+   Over the session the bare primed canvas receives a tonal
+   underpainting and then colour, stroke by stroke, finishing
+   just before 00:00, when the museum label appears.
 ══════════════════════════════════════════════════════════ */
 
 const GALLERY = {
@@ -2108,25 +2109,24 @@ const GALLERY = {
 
   artworks: [
     { id: 'starry',      src: 'paintings/starry-night.jpeg',        title: 'The Starry Night',              artist: 'Vincent van Gogh',      year: '1889' },
+    { id: 'athens',      src: 'paintings/school-of-athens.jpeg',    title: 'The School of Athens',          artist: 'Raphael',               year: '1511' },
     { id: 'wheat',       src: 'paintings/wheat-field-cypresses.jpeg',title: 'Wheat Field with Cypresses',    artist: 'Vincent van Gogh',      year: '1889' },
     { id: 'boulevard',   src: 'paintings/boulevard-montmartre.jpeg', title: 'Boulevard Montmartre',          artist: 'Camille Pissarro',      year: '1897' },
     { id: 'waterlilies', src: 'paintings/water-lilies.jpeg',         title: 'Water Lilies',                  artist: 'Claude Monet',          year: '1906' },
     { id: 'bridge',      src: 'paintings/japanese-bridge.jpeg',      title: 'The Water Lily Pond',           artist: 'Claude Monet',          year: '1900' },
     { id: 'almond',      src: 'paintings/almond-blossoms.jpeg',      title: 'Almond Blossoms',              artist: 'Vincent van Gogh',      year: '1890' },
     { id: 'luncheon',    src: 'paintings/luncheon-boating.jpeg',     title: 'Luncheon of the Boating Party', artist: 'Pierre-Auguste Renoir', year: '1881' },
-    { id: 'wave',        src: 'paintings/great-wave.jpeg',           title: 'The Great Wave off Kanagawa',   artist: 'Katsushika Hokusai',    year: '1831' },
-    { id: 'pearl',       src: 'paintings/girl-pearl-earring.jpeg',   title: 'Girl with a Pearl Earring',     artist: 'Johannes Vermeer',      year: '1665' },
+    { id: 'irises',      src: 'paintings/irises.jpeg',               title: 'Irises',                        artist: 'Vincent van Gogh',      year: '1889' },
   ],
 
   currentArt: null,
 
   // Reveal state
-  blobs: [],                // Array of {x, y, maxR}
-  placardShownAt: 0,        // time the placard started fading in (0 = not yet)
-  
-  // Offscreen canvas for the mask
-  maskCanvas: null,
-  maskCtx: null
+  seed: 0,
+  field: null,              // brush-stroke reveal order (low-res Float32 field)
+  under: null,              // sepia underpainting canvas
+  caches: null,             // per-canvas layout/layer caches (WeakMap)
+  placardShownAt: 0,        // time the museum label started fading in (0 = not yet)
 };
 
 /* ── seeded PRNG (mulberry32) ── */
@@ -2176,261 +2176,370 @@ function galleryReset() {
   GALLERY.image.onload = () => { GALLERY.loaded = true; };
   GALLERY.image.onerror = () => { GALLERY.error = true; };
 
-  // ── Derive blob count M from session duration ──
-  // M scales from 300 to 1500.
-  const totalSecs = state.totalSeconds || 60;
-  const targetM = Math.max(300, Math.min(1500, Math.round(totalSecs * 15)));
+  // Reveal-order field and per-canvas render caches are built lazily
+  GALLERY.seed = _gallerySeed(GALLERY.currentArt.id + Date.now().toString());
+  GALLERY.field = null;
+  GALLERY.under = null;
+  GALLERY.caches = new WeakMap();
+}
 
-  // Calculate best grid dimensions for M (assume roughly 16:9 screen)
-  const cols = Math.ceil(Math.sqrt(targetM * 1.77)); 
-  const rows = Math.ceil(targetM / cols);
-  
-  GALLERY.cols = cols;
-  GALLERY.rows = rows;
+/* ── Brush-stroke reveal order ──
+   Simulates a painter working: broad blocking-in strokes first (centre of
+   interest early), then progressively finer strokes. Each cell of a low-res
+   field stores the moment (0..1) its paint goes down. */
+function _galleryBuildField(aspect, seed) {
+  const FW = 168;
+  const FH = Math.max(48, Math.round(FW / aspect));
+  const field = new Float32Array(FW * FH).fill(2);
+  const rng = _galleryRng(seed);
+  const N = 1600;
+  const ang0 = rng() * Math.PI;
 
-  const sessionSeed = _gallerySeed(GALLERY.currentArt.id + Date.now().toString());
-  const rng = _galleryRng(sessionSeed);
-  
-  const blobs = [];
-  
-  // ── Build jittered grid ──
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cx = (c + 0.5) / cols;
-      const cy = (r + 0.5) / rows;
-      
-      // Jitter position ±40% of cell size
-      const jx = (rng() - 0.5) * 0.8 / cols;
-      const jy = (rng() - 0.5) * 0.8 / rows;
-      
-      // Generate a cluster of drops for a true watercolor splash effect
-      const drops = [];
-      
-      // Core drop
-      drops.push({
-        dx: 0, dy: 0,
-        // High variance so splashes range from very small to medium-large
-        rMult: 0.2 + 1.2 * rng() 
-      });
-      
-      // Satellite drops: pushed outwards for organic splatter texture
-      const numSats = 2 + Math.floor(rng() * 8); // 2 to 9 satellites for high variety
-      for (let s = 0; s < numSats; s++) {
-        const angle = rng() * Math.PI * 2;
-        // Distribute satellites further out to create spindly splash arms
-        const dist = 0.5 + 0.7 * rng(); 
-        const satR = 0.2 + 0.3 * rng(); 
-        
-        drops.push({
-          dx: Math.cos(angle) * dist,
-          dy: Math.sin(angle) * dist,
-          rMult: satR
-        });
+  for (let i = 0; i < N; i++) {
+    const t = i / N;
+    // Best-of-k: prefer spots not painted yet so coverage spreads naturally
+    let bx = 0, by = 0, best = -1;
+    const k = 10;
+    for (let c = 0; c < k; c++) {
+      let x, y;
+      if (t < 0.3 && rng() < 0.5) {
+        // early strokes favour the centre of interest
+        const a = rng() * Math.PI * 2, r = Math.sqrt(rng()) * (0.25 + t * 1.6);
+        x = 0.5 + Math.cos(a) * r * 0.5; y = 0.46 + Math.sin(a) * r * 0.5;
+      } else {
+        x = rng(); y = rng();
       }
-      
-      blobs.push({ x: cx + jx, y: cy + jy, drops: drops });
+      x = Math.min(0.999, Math.max(0, x)); y = Math.min(0.999, Math.max(0, y));
+      const v = field[Math.floor(y * FH) * FW + Math.floor(x * FW)];
+      const score = v + rng() * 0.3;
+      if (score > best) { best = score; bx = x; by = y; }
+    }
+    // Stroke size shrinks as the painting is refined
+    const width = (0.055 * Math.pow(1 - t, 1.2) + 0.018) * FW * (0.75 + rng() * 0.5);
+    const len = width * (1.6 + rng() * 2.2);
+    // Brush direction follows a gentle flow field, like consistent handwork
+    const ang = ang0 + Math.sin(bx * 5.0 + by * 3.0) * 0.9 + (rng() - 0.5) * 0.6;
+    const cx = bx * FW, cy = by * FH;
+    const dx = Math.cos(ang) * len * 0.5, dy = Math.sin(ang) * len * 0.5;
+    const x0 = cx - dx, y0 = cy - dy, x1 = cx + dx, y1 = cy + dy;
+    const rad = width * 0.5;
+    const minX = Math.max(0, Math.floor(Math.min(x0, x1) - rad)), maxX = Math.min(FW - 1, Math.ceil(Math.max(x0, x1) + rad));
+    const minY = Math.max(0, Math.floor(Math.min(y0, y1) - rad)), maxY = Math.min(FH - 1, Math.ceil(Math.max(y0, y1) + rad));
+    const sx = x1 - x0, sy = y1 - y0, sl = sx * sx + sy * sy || 1;
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        let u = ((x - x0) * sx + (y - y0) * sy) / sl;
+        u = Math.max(0, Math.min(1, u));
+        const px = x0 + sx * u - x, py = y0 + sy * u - y;
+        // ragged, bristly edge; the stroke tapers at its tail
+        const edge = rad * (0.78 + 0.32 * rng()) * (1 - 0.35 * u);
+        if (px * px + py * py < edge * edge) {
+          const o = y * FW + x;
+          // paint goes down along the stroke, with a little bristle jitter
+          const tv = t + u * 0.004;
+          if (tv < field[o]) field[o] = tv;
+        }
+      }
     }
   }
-
-  // Shuffle the blobs independent of position (determines reveal order)
-  const rngShuffle = _galleryRng(sessionSeed + 1);
-  for (let i = blobs.length - 1; i > 0; i--) {
-    const j = Math.floor(rngShuffle() * (i + 1));
-    [blobs[i], blobs[j]] = [blobs[j], blobs[i]];
+  // Final touches: anything still bare is finished at the very end
+  for (let i = 0; i < field.length; i++) {
+    if (field[i] > 1) field[i] = 1.5 + rng() * 0.1;
   }
-  
-  GALLERY.blobs = blobs;
+  // Soften: a small blur removes isolated cells so edges read as brushwork
+  for (let pass = 0; pass < 2; pass++) {
+    const src = field.slice();
+    for (let y = 0; y < FH; y++) {
+      for (let x = 0; x < FW; x++) {
+        let sum = 0, n = 0;
+        for (let oy = -1; oy <= 1; oy++) {
+          const yy = y + oy; if (yy < 0 || yy >= FH) continue;
+          for (let ox = -1; ox <= 1; ox++) {
+            const xx = x + ox; if (xx < 0 || xx >= FW) continue;
+            sum += src[yy * FW + xx]; n++;
+          }
+        }
+        field[y * FW + x] = sum / n;
+      }
+    }
+  }
+  // Equalise by rank so painted area grows steadily with the timer
+  const order = Array.from(field.keys()).sort((a, b) => field[a] - field[b]);
+  const out = new Float32Array(field.length);
+  for (let r = 0; r < order.length; r++) out[order[r]] = r / (order.length - 1);
+  return { FW, FH, field: out };
+}
+
+/* ── Sepia underpainting derived from the artwork ── */
+function _galleryBuildUnder(img) {
+  const w = 360, h = Math.max(1, Math.round(360 * img.height / img.width));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  x.drawImage(img, 0, 0, w, h);
+  try {
+    const d = x.getImageData(0, 0, w, h);
+    const a = d.data;
+    for (let i = 0; i < a.length; i += 4) {
+      let l = (a[i] * 0.3 + a[i + 1] * 0.59 + a[i + 2] * 0.11) / 255;
+      l = 0.22 + 0.7 * Math.pow(l, 0.9);               // flatter, like a tonal sketch
+      a[i]     = 52 + l * 180;
+      a[i + 1] = 36 + l * 160;
+      a[i + 2] = 24 + l * 128;
+    }
+    x.putImageData(d, 0, 0);
+  } catch (_) { /* tainted canvas: fall back to the plain image */ }
+  return c;
+}
+
+function _galleryLayout(W, H, img) {
+  const portrait = H > W * 1.1;
+  const isPreview = W < 300;
+  const aspect = img.width / img.height;
+  const border = isPreview ? Math.max(4, W * 0.035) : Math.max(12, Math.min(42, Math.min(W, H) * 0.042));
+  const maxW = W * (isPreview ? 0.86 : portrait ? 0.84 : 0.66) - border * 2;
+  const maxH = H * (isPreview ? 0.70 : portrait ? 0.60 : 0.64) - border * 2;
+  let iw = maxW, ih = maxW / aspect;
+  if (ih > maxH) { ih = maxH; iw = maxH * aspect; }
+  const cx = W / 2;
+  const cy = H * (isPreview ? 0.5 : portrait ? 0.44 : 0.46);
+  return {
+    W, H, border, isPreview,
+    ix: Math.round(cx - iw / 2), iy: Math.round(cy - ih / 2), iw: Math.round(iw), ih: Math.round(ih),
+  };
+}
+
+// Wall, picture light, gilded frame and primed canvas — rendered once per layout
+function _galleryBuildStatic(L, dpr) {
+  const c = document.createElement('canvas');
+  c.width = Math.round(L.W * dpr); c.height = Math.round(L.H * dpr);
+  const x = c.getContext('2d');
+  x.scale(dpr, dpr);
+  const { W, H, ix, iy, iw, ih, border: b } = L;
+
+  // Wall: deep warm grey plaster
+  x.fillStyle = '#121010';
+  x.fillRect(0, 0, W, H);
+  const n = document.createElement('canvas');
+  n.width = 256; n.height = 256;
+  const nx = n.getContext('2d');
+  const nd = nx.createImageData(256, 256);
+  const rng = _galleryRng(7);
+  for (let i = 0; i < nd.data.length; i += 4) {
+    const v = 128 + (rng() - 0.5) * 34;
+    nd.data[i] = nd.data[i + 1] = nd.data[i + 2] = v; nd.data[i + 3] = 255;
+  }
+  nx.putImageData(nd, 0, 0);
+  x.save();
+  x.globalAlpha = 0.05;
+  x.globalCompositeOperation = 'overlay';
+  x.imageSmoothingEnabled = true;
+  x.drawImage(n, 0, 0, W, H);
+  x.restore();
+
+  // Picture light: a warm pool on the wall, strongest just above the frame
+  const lcx = W / 2, lcy = iy - b - Math.min(H * 0.08, 60);
+  const lr = Math.max(iw * 1.05, ih * 1.25);
+  const wash = x.createRadialGradient(lcx, lcy, 0, lcx, lcy, lr);
+  wash.addColorStop(0, 'rgba(255, 226, 184, 0.20)');
+  wash.addColorStop(0.45, 'rgba(255, 214, 165, 0.09)');
+  wash.addColorStop(1, 'rgba(255, 200, 150, 0)');
+  x.fillStyle = wash;
+  x.fillRect(0, 0, W, H);
+  // Vignette into the dark room
+  const vg = x.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.3, W / 2, H * 0.45, Math.max(W, H) * 0.8);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+  x.fillStyle = vg;
+  x.fillRect(0, 0, W, H);
+
+  // Frame drop shadow (light comes from above)
+  const fx = ix - b, fy = iy - b, fw = iw + b * 2, fh = ih + b * 2;
+  x.save();
+  x.shadowColor = 'rgba(0, 0, 0, 0.75)';
+  x.shadowBlur = L.isPreview ? 6 : 34;
+  x.shadowOffsetY = L.isPreview ? 3 : 18;
+  x.fillStyle = '#1b140c';
+  x.fillRect(fx, fy, fw, fh);
+  x.restore();
+
+  // Gilded moulding: bands from outer edge to sight edge, each side lit differently
+  const bands = [
+    { a: 0.00, b: 0.10, col: [58, 42, 22] },     // outer dark edge
+    { a: 0.10, b: 0.42, col: [176, 138, 72] },   // main gold cove
+    { a: 0.42, b: 0.55, col: [214, 178, 106] },  // raised bead (catches light)
+    { a: 0.55, b: 0.86, col: [128, 96, 50] },    // inner scotia
+    { a: 0.86, b: 0.94, col: [70, 52, 28] },     // shadowed lip
+    { a: 0.94, b: 1.00, col: [222, 190, 120] },  // bright sight edge
+  ];
+  const sides = [
+    { lit: 1.18, poly: (o, i) => [[fx + o, fy + o], [fx + fw - o, fy + o], [fx + fw - i, fy + i], [fx + i, fy + i]] },          // top
+    { lit: 0.62, poly: (o, i) => [[fx + o, fy + fh - o], [fx + fw - o, fy + fh - o], [fx + fw - i, fy + fh - i], [fx + i, fy + fh - i]] }, // bottom
+    { lit: 0.95, poly: (o, i) => [[fx + o, fy + o], [fx + i, fy + i], [fx + i, fy + fh - i], [fx + o, fy + fh - o]] },         // left
+    { lit: 0.80, poly: (o, i) => [[fx + fw - o, fy + o], [fx + fw - i, fy + i], [fx + fw - i, fy + fh - i], [fx + fw - o, fy + fh - o]] }, // right
+  ];
+  for (const s of sides) {
+    for (const band of bands) {
+      const o = band.a * b, i2 = band.b * b;
+      const pts = s.poly(o, i2);
+      // a bead/cove reads as a gradient across the band
+      const g = x.createLinearGradient(pts[0][0], pts[0][1], pts[3][0], pts[3][1]);
+      const c0 = band.col.map(v => Math.min(255, Math.round(v * s.lit * 1.08)));
+      const c1 = band.col.map(v => Math.min(255, Math.round(v * s.lit * 0.82)));
+      g.addColorStop(0, `rgb(${c0})`);
+      g.addColorStop(1, `rgb(${c1})`);
+      x.fillStyle = g;
+      x.beginPath();
+      x.moveTo(pts[0][0], pts[0][1]);
+      for (let k = 1; k < 4; k++) x.lineTo(pts[k][0], pts[k][1]);
+      x.closePath();
+      x.fill();
+    }
+  }
+  // Worn gilding texture over the frame
+  x.save();
+  x.beginPath();
+  x.rect(fx, fy, fw, fh);
+  x.rect(ix, iy, iw, ih);
+  x.clip('evenodd');
+  x.globalAlpha = 0.18;
+  x.globalCompositeOperation = 'multiply';
+  x.drawImage(n, fx, fy, fw, fh);
+  x.restore();
+
+  // Primed linen canvas (gesso) inside the frame
+  x.fillStyle = '#e4dccb';
+  x.fillRect(ix, iy, iw, ih);
+  x.save();
+  x.globalAlpha = 0.09;
+  x.globalCompositeOperation = 'multiply';
+  for (let yy = iy; yy < iy + ih; yy += 2) { x.fillStyle = (yy & 2) ? '#8a7f6a' : '#b4aa94'; x.fillRect(ix, yy, iw, 1); }
+  for (let xx = ix; xx < ix + iw; xx += 3) { x.fillStyle = '#9d927c'; x.fillRect(xx, iy, 1, ih); }
+  x.restore();
+  return c;
+}
+
+function _galleryLightOverlay(x, L) {
+  // Picture light falls off down the canvas; the frame casts a soft shadow at the top edge
+  const g = x.createLinearGradient(0, L.iy, 0, L.iy + L.ih);
+  g.addColorStop(0, 'rgba(255, 236, 205, 0.10)');
+  g.addColorStop(0.35, 'rgba(0, 0, 0, 0)');
+  g.addColorStop(1, 'rgba(0, 0, 0, 0.28)');
+  x.fillStyle = g;
+  x.fillRect(L.ix, L.iy, L.iw, L.ih);
+  const s = Math.max(3, L.border * 0.45);
+  const top = x.createLinearGradient(0, L.iy, 0, L.iy + s);
+  top.addColorStop(0, 'rgba(0,0,0,0.45)');
+  top.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = top;
+  x.fillRect(L.ix, L.iy, L.iw, s);
 }
 
 function drawGallery(ctx, W, H, p, time) {
   if (!GALLERY.initd) galleryReset();
   const isPreview = W < 300;
 
-  // ── background ──
-  ctx.fillStyle = '#0a0a0a';
-  ctx.fillRect(0, 0, W, H);
-
-  // ── draw painting (cover-fit) ──
   if (GALLERY.loaded) {
     const img = GALLERY.image;
-    const imgR = img.width / img.height;
-    const canR = W / H;
-    let dw, dh, dx, dy;
-    if (canR > imgR) { dw = W; dh = W / imgR; dx = 0; dy = (H - dh) / 2; }
-    else             { dh = H; dw = H * imgR; dy = 0; dx = (W - dw) / 2; }
-    ctx.drawImage(img, dx, dy, dw, dh);
+    if (!GALLERY.field) GALLERY.field = _galleryBuildField(img.width / img.height, GALLERY.seed);
+    if (!GALLERY.under) GALLERY.under = _galleryBuildUnder(img);
 
-    // ── Safety net: crossfade entire cover at the end ──
-    // At p=0.95, it's fully opaque. By p=1.0, it's 0.
-    const globalCoverOpacity = p > 0.95 ? 1 - (p - 0.95) * 20 : 1;
-    
-    if (globalCoverOpacity > 0.005) {
-      if (!GALLERY.maskCanvas) {
-        GALLERY.maskCanvas = document.createElement('canvas');
-        GALLERY.maskCtx = GALLERY.maskCanvas.getContext('2d', { willReadFrequently: true });
-      }
-      if (GALLERY.maskCanvas.width !== W || GALLERY.maskCanvas.height !== H) {
-        GALLERY.maskCanvas.width = W;
-        GALLERY.maskCanvas.height = H;
-      }
-      
-      const mCtx = GALLERY.maskCtx;
-      
-      // 1. Fill mask canvas with the frosted cover
-      mCtx.globalCompositeOperation = 'source-over';
-      mCtx.fillStyle = 'rgba(12, 12, 14, 0.88)';
-      mCtx.fillRect(0, 0, W, H);
-      
-      // Subtle sheen on the frosted cover
-      const sheen = mCtx.createLinearGradient(0, 0, W, H);
-      sheen.addColorStop(0, 'rgba(255, 255, 255, 0.06)');
-      sheen.addColorStop(0.5, 'rgba(255, 255, 255, 0.02)');
-      sheen.addColorStop(1, 'rgba(255, 255, 255, 0.04)');
-      mCtx.fillStyle = sheen;
-      mCtx.fillRect(0, 0, W, H);
+    const dpr = (ctx.getTransform ? ctx.getTransform().a : 1) || 1;
+    let C = GALLERY.caches.get(ctx.canvas);
+    if (!C || C.W !== W || C.H !== H || C.dpr !== dpr || C.img !== img) {
+      const L = _galleryLayout(W, H, img);
+      const mk = () => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(L.iw * dpr)); c.height = Math.max(1, Math.round(L.ih * dpr)); return c; };
+      const F = GALLERY.field;
+      const small = document.createElement('canvas');
+      small.width = F.FW; small.height = F.FH;
+      C = {
+        W, H, dpr, img, L,
+        stat: _galleryBuildStatic(L, dpr),
+        underLayer: mk(), colorLayer: mk(),
+        small, smallCtx: small.getContext('2d'), smallData: small.getContext('2d').createImageData(F.FW, F.FH),
+        lastP: -1,
+      };
+      GALLERY.caches.set(ctx.canvas, C);
+    }
+    const L = C.L;
 
-      // 2. Erase holes where blooms have expanded
-      mCtx.globalCompositeOperation = 'destination-out';
-      
-      const N = GALLERY.blobs.length;
-      // We want ~3.5 blobs actively growing at any time
-      const activeWidth = Math.max(0.05, 3.5 / N);
-      
-      for (let i = 0; i < N; i++) {
-        const blob = GALLERY.blobs[i];
-        
-        // Map blob i's growth across the ENTIRE timer so the last one finishes exactly at p=0.99
-        // This guarantees 100% reveal just before the timer UI hits 0:00
-        const startP = (i / Math.max(1, N - 1)) * (0.99 - activeWidth);
-        const endP = startP + activeWidth;
-        
-        let t = 0;
-        if (isPreview) {
-          // In preview, blobs are fully bloomed or hidden based on progress
-          // Speed up the preview reveal so it loops nicely
-          t = (p * 1.5) > (i / N) ? 1 : 0;
-        } else {
-          t = (p - startP) / (endP - startP);
-          t = Math.max(0, Math.min(1, t));
+    // Painting finishes just before the timer reaches 00:00
+    const pc = isPreview ? Math.min(1, p * 1.1) : Math.min(1, p / 0.985);
+
+    // Rebuild the paint masks only when progress has moved enough to matter
+    if (Math.abs(pc - C.lastP) > (isPreview ? 0.01 : 0.0004) || C.lastP < 0) {
+      const F = GALLERY.field;
+      const paintLayer = (layer, source, prog, scale, offset, band) => {
+        const d = C.smallData.data;
+        const f = F.field;
+        const pp = prog * (1 + band);
+        for (let i = 0, j = 3; i < f.length; i++, j += 4) {
+          const fv = f[i] * scale + offset;
+          let a = (pp - fv) / band;
+          a = a < 0 ? 0 : a > 1 ? 1 : a;
+          d[j] = a * 255;
         }
-        
-        if (t > 0) {
-          // Cubic ease-out for a fast start, slow organic finish
-          const ease = 1 - Math.pow(1 - t, 3);
-          
-          const cellW = W / GALLERY.cols;
-          const cellH = H / GALLERY.rows;
-          
-          // Use cellDiag / 2 as base radius so the splatters stay contained mostly to their own cells.
-          // The combined overlap of all cells guarantees 100% geometric coverage without prematurely revealing the screen.
-          const cellDiag = Math.sqrt(cellW * cellW + cellH * cellH);
-          const baseRadius = cellDiag / 2;
-          
-          const bx = blob.x * W;
-          const by = blob.y * H;
-          
-          for (let d = 0; d < blob.drops.length; d++) {
-            const drop = blob.drops[d];
-            const dropR = baseRadius * drop.rMult * ease;
-            
-            if (dropR > 0.5) {
-              // Scale positional offsets by ease so droplets spread outward dynamically!
-              const dropX = bx + drop.dx * baseRadius * ease;
-              const dropY = by + drop.dy * baseRadius * ease;
-              
-              const grad = mCtx.createRadialGradient(dropX, dropY, 0, dropX, dropY, dropR);
-              // Core drop and satellites are solidly opaque for most of their radius to create distinct droplets, 
-              // with just enough soft bleed at the edges to look like watercolor on canvas
-              grad.addColorStop(0, 'rgba(0,0,0,1)');
-              grad.addColorStop(d === 0 ? 0.75 : 0.6, 'rgba(0,0,0,1)');
-              grad.addColorStop(0.9, 'rgba(0,0,0,0.8)');
-              grad.addColorStop(1, 'rgba(0,0,0,0)');
-              
-              mCtx.fillStyle = grad;
-              mCtx.beginPath();
-              mCtx.arc(dropX, dropY, dropR, 0, Math.PI * 2);
-              mCtx.fill();
-            }
-          }
-        }
-      }
-      
-      // 3. Draw the masked cover over the main canvas
-      ctx.save();
-      if (p > 0.95 && !isPreview) {
-        // Fade out any remaining un-splattered frosted glass over the last 5% of the session
-        // This guarantees that exactly at the last second, the painting is 100% visible
-        const fadeP = (p - 0.95) / 0.05; 
-        ctx.globalAlpha = Math.max(0, 1.0 - fadeP);
-      } else {
-        ctx.globalAlpha = 1.0;
-      }
-      ctx.drawImage(GALLERY.maskCanvas, 0, 0);
-      ctx.restore();
+        C.smallCtx.putImageData(C.smallData, 0, 0);
+        const lx = layer.getContext('2d');
+        lx.globalCompositeOperation = 'source-over';
+        lx.clearRect(0, 0, layer.width, layer.height);
+        lx.imageSmoothingEnabled = true;
+        lx.imageSmoothingQuality = 'high';
+        lx.drawImage(C.small, 0, 0, layer.width, layer.height);
+        lx.globalCompositeOperation = 'source-in';
+        lx.drawImage(source, 0, 0, layer.width, layer.height);
+        lx.globalCompositeOperation = 'source-over';
+      };
+      // Tonal underpainting runs ahead (done by ~70%), colour follows
+      paintLayer(C.underLayer, GALLERY.under, pc, 0.70, -0.015, 0.03);
+      paintLayer(C.colorLayer, img, pc, 1.0, 0.0, 0.014);
+      C.lastP = pc;
     }
 
-    // ── subtle vignette on the revealed painting ──
-    const vigCx = W / 2, vigCy = H / 2;
-    const vignette = ctx.createRadialGradient(vigCx, vigCy, Math.min(W, H) * 0.35, vigCx, vigCy, Math.max(W, H) * 0.85);
-    vignette.addColorStop(0, 'transparent');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.35)');
-    ctx.fillStyle = vignette;
-    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(C.stat, 0, 0, W, H);
+    if (pc < 1) ctx.drawImage(C.underLayer, L.ix, L.iy, L.iw, L.ih);
+    ctx.drawImage(C.colorLayer, L.ix, L.iy, L.iw, L.ih);
+    _galleryLightOverlay(ctx, L);
 
-    // ── museum placard (fades in ~1s after last blob finishes, around p=0.98) ──
-    if (!isPreview && p >= 0.98) {
+    // ── Museum label, placed on the wall beneath the frame ──
+    if (!isPreview && p >= 0.985) {
       if (GALLERY.placardShownAt === 0) GALLERY.placardShownAt = time;
-      const elapsed = time - GALLERY.placardShownAt;
-      const placardAlpha = Math.min(1, elapsed / 1.0);  // 1-second fade
-
-      if (placardAlpha > 0.01) {
+      const a = Math.min(1, (time - GALLERY.placardShownAt) / 1.2);
+      if (a > 0.01) {
+        const art = GALLERY.currentArt;
         ctx.save();
-        ctx.globalAlpha = placardAlpha;
-
-        // Placard background — frosted dark panel at bottom-right
-        const pW = Math.min(340, W * 0.45);
-        const pH = 72;
-        const pX = W - pW - 24;
-        const pY = H - pH - 24;
-        const pR = 8; // border-radius
-
-        ctx.beginPath();
-        ctx.moveTo(pX + pR, pY);
-        ctx.lineTo(pX + pW - pR, pY);
-        ctx.quadraticCurveTo(pX + pW, pY, pX + pW, pY + pR);
-        ctx.lineTo(pX + pW, pY + pH - pR);
-        ctx.quadraticCurveTo(pX + pW, pY + pH, pX + pW - pR, pY + pH);
-        ctx.lineTo(pX + pR, pY + pH);
-        ctx.quadraticCurveTo(pX, pY + pH, pX, pY + pH - pR);
-        ctx.lineTo(pX, pY + pR);
-        ctx.quadraticCurveTo(pX, pY, pX + pR, pY);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(10, 10, 12, 0.82)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(212, 168, 83, 0.35)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // Title
+        ctx.globalAlpha = a;
+        const pW = Math.min(280, Math.max(200, L.iw * 0.42));
+        const pH = 62;
+        let pX = L.ix + L.iw - pW;
+        let pY = L.iy + L.ih + L.border + 22;
+        if (pY + pH > H - 16) {
+          // no room below: hang it beside the frame's lower right corner, or inside the wall margin
+          const side = L.ix + L.iw + L.border + 20;
+          if (side + pW < W - 12) { pX = side; pY = L.iy + L.ih + L.border - pH; }
+          else { pY = H - pH - 16; }
+        }
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetY = 4;
+        ctx.fillStyle = 'rgba(236, 230, 218, 0.94)';
+        ctx.fillRect(pX, pY, pW, pH);
+        ctx.shadowColor = 'transparent';
         ctx.textAlign = 'left';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-        ctx.shadowBlur = 4;
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '500 16px Inter';
-        ctx.fillText(GALLERY.currentArt.title, pX + 16, pY + 28);
-
-        // Artist + year
-        ctx.fillStyle = 'rgba(212, 168, 83, 0.9)';
-        ctx.font = '400 12px Inter';
-        ctx.fillText(`${GALLERY.currentArt.artist}, ${GALLERY.currentArt.year}`, pX + 16, pY + 50);
-
+        ctx.fillStyle = '#1b1814';
+        ctx.font = 'italic 17px "Instrument Serif", Georgia, serif';
+        ctx.fillText(art.title, pX + 14, pY + 25, pW - 28);
+        ctx.fillStyle = '#5b5247';
+        ctx.font = '400 11px Inter, sans-serif';
+        ctx.fillText(`${art.artist}, ${art.year}`, pX + 14, pY + 45, pW - 28);
         ctx.restore();
       }
+    } else if (p < 0.98) {
+      GALLERY.placardShownAt = 0;
     }
 
   } else if (GALLERY.error) {
-    // ── error state ──
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = '#121010';
     ctx.fillRect(0, 0, W, H);
     if (!isPreview) {
       ctx.fillStyle = '#555';
@@ -2440,18 +2549,14 @@ function drawGallery(ctx, W, H, p, time) {
     }
   } else {
     // ── loading state: elegant breathing ripple ──
-    ctx.fillStyle = '#0a0a0c'; // Deep elegant background
+    ctx.fillStyle = '#0a0a0c';
     ctx.fillRect(0, 0, W, H);
-    
     if (!isPreview) {
-      // Breathing inner dot
       const alphaInner = 0.3 + 0.4 * Math.sin(time * 2.5);
       ctx.fillStyle = `rgba(212, 168, 83, ${alphaInner})`;
       ctx.beginPath();
       ctx.arc(W / 2, H / 2, 2.5, 0, Math.PI * 2);
       ctx.fill();
-      
-      // Expanding outer ripple
       const r = (time * 18) % 45;
       const alphaOuter = Math.max(0, 1 - (r / 45));
       ctx.strokeStyle = `rgba(212, 168, 83, ${alphaOuter * 0.6})`;
@@ -2459,7 +2564,6 @@ function drawGallery(ctx, W, H, p, time) {
       ctx.beginPath();
       ctx.arc(W / 2, H / 2, 3 + r, 0, Math.PI * 2);
       ctx.stroke();
-
       ctx.fillStyle = 'rgba(255,255,255,0.3)';
       ctx.font = '300 11px Inter';
       ctx.textAlign = 'center';
