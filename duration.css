@@ -1,0 +1,350 @@
+/* ══════════════════════════════════════════════════════════
+   VibeFocus — Duration screen, sunny-hillside look
+   Matches the landing hero: the hillside plate behind, sage glass,
+   Grandstander display type, white pills with green text.
+   Scoped to #screen-duration; app.js hooks are unchanged.
+   (!important is needed where styles.css already forces fonts/sizes.)
+══════════════════════════════════════════════════════════ */
+
+#screen-duration {
+  --dz-green: #5b875c;
+  --dz-display: 'Grandstander', 'Trebuchet MS', system-ui, sans-serif;
+  --dz-body: 'LP Inter', 'Inter', system-ui, -apple-system, sans-serif;
+  --dz-glass: rgba(173, 196, 174, 0.42);
+  --dz-glass-hover: rgba(190, 212, 190, 0.56);
+  --dz-shadow: rgba(28, 70, 120, 0.28);
+
+  /* The hero's plate, softened by a sky-to-grass wash (stays put while the panel scrolls) */
+  background:
+    linear-gradient(180deg, rgba(38, 92, 156, 0.34) 0%, rgba(38, 92, 156, 0.14) 42%, rgba(34, 74, 40, 0.38) 100%),
+    url('https://d2ol7oe51mr4n9.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/3ca5d10d-ea2f-4907-876f-33bde169469e.jpg') 50% 0% / cover no-repeat,
+    #5f93c9 !important;
+  color: #fff;
+  font-family: var(--dz-body);
+}
+
+/* Drop the old grain + breathing glow */
+#screen-duration::before,
+#screen-duration::after { display: none !important; }
+
+#screen-duration .dur-left-panel {
+  border: none !important;
+  background: none;
+}
+
+/* ── Dial: a frosted glass sun ───────────────────────────── */
+#screen-duration .glass-dial-orb {
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.16) 55%, rgba(255, 255, 255, 0.1) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 24px 60px rgba(28, 70, 120, 0.28),
+    inset 0 2px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -18px 40px rgba(28, 70, 120, 0.12);
+}
+#screen-duration .dial-brass-rim {
+  background: linear-gradient(160deg, #ffffff 0%, rgba(255, 255, 255, 0.75) 50%, #ffffff 100%) border-box;
+  box-shadow: 0 6px 18px rgba(28, 70, 120, 0.2);
+}
+#screen-duration .tick { background: rgba(255, 255, 255, 0.55); }
+#screen-duration .tick:nth-child(3n+1) { background: #fff; }
+#screen-duration .dial-glow-aura,
+#screen-duration .dial-shimmer { display: none; }
+
+#screen-duration .dial-eyebrow {
+  font-family: var(--dz-display) !important;
+  font-weight: 900;
+  font-size: 17px;
+  letter-spacing: 0.04em !important;
+  color: #fff;
+  text-shadow: 0 2px 10px var(--dz-shadow);
+  margin-bottom: 0.4rem;
+}
+#screen-duration .dial-display-time {
+  font-family: var(--dz-display);
+  font-style: normal;
+  font-weight: 900;
+  font-size: 6.4rem;
+  line-height: 0.95;
+  letter-spacing: 0;
+  text-shadow: 0 4px 18px var(--dz-shadow);
+}
+/* Nothing picked yet: a quiet placeholder dash instead of a heavy bar */
+#screen-duration:not([class*="dur-selected-"]) .dial-display-time::after {
+  opacity: 0.5;
+  font-size: 0.6em;
+}
+#screen-duration .dial-unit {
+  font-family: var(--dz-body) !important;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 8px var(--dz-shadow);
+}
+/* The orbiting gem becomes a small sun */
+#screen-duration .dial-orbit-dot {
+  border: 2px solid #fff !important;
+  background: radial-gradient(circle at 40% 35%, #fffbe8 0%, #ffe08a 55%, #f6c445 100%) !important;
+  box-shadow: 0 0 12px rgba(255, 224, 138, 0.9), 0 0 26px rgba(255, 224, 138, 0.45) !important;
+}
+
+/* ── Right panel ─────────────────────────────────────────── */
+#screen-duration .btn-back {
+  border: none;
+  background: rgba(173, 196, 174, 0.45);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: #fff;
+  padding: 0.6rem 1.15rem 0.6rem 0.95rem;
+}
+#screen-duration .btn-back span {
+  font-family: var(--dz-body) !important;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+#screen-duration .btn-back:hover {
+  background: rgba(190, 212, 190, 0.6);
+  color: #fff;
+  transform: translateX(-3px);
+}
+
+#screen-duration .dur-heading {
+  font-family: var(--dz-display) !important;
+  font-style: normal !important;
+  font-weight: 900 !important;
+  text-transform: uppercase;
+  font-size: clamp(2.4rem, 4.4vw, 3.9rem);
+  line-height: 0.98;
+  letter-spacing: 0;
+  text-shadow: 0 4px 18px var(--dz-shadow);
+}
+#screen-duration .dur-subtitle {
+  font-family: var(--dz-body);
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: #fff;
+  opacity: 0.95;
+  margin-top: 0.6rem;
+  text-shadow: 0 1px 2px rgba(20, 60, 110, 0.3), 0 2px 12px rgba(20, 60, 110, 0.35);
+}
+
+/* ── Duration cards: sage glass, white when chosen ───────── */
+#screen-duration .dur-pills { gap: 1rem; }
+
+#screen-duration .dur-pill {
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 20px;
+  background: var(--dz-glass);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 28px rgba(28, 70, 120, 0.16);
+  padding: 1.4rem 1.25rem;
+}
+#screen-duration .dur-pill::before { display: none; }
+#screen-duration .dur-pill:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+  background: var(--dz-glass-hover);
+  transform: translateY(-3px);
+  box-shadow: 0 16px 34px rgba(28, 70, 120, 0.22);
+}
+#screen-duration .dur-pill:focus-visible {
+  border-color: #fff !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.75), 0 16px 34px rgba(28, 70, 120, 0.22) !important;
+}
+
+#screen-duration .pill-time {
+  font-family: var(--dz-display);
+  font-style: normal;
+  font-weight: 900;
+  font-size: 3rem;
+  color: #fff;
+  text-shadow: 0 3px 12px var(--dz-shadow);
+}
+#screen-duration .preset-hero .pill-time { font-size: 3.6rem; }
+#screen-duration .pill-hairline { background: rgba(255, 255, 255, 0.55); }
+#screen-duration .pill-tag {
+  font-family: var(--dz-body) !important;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: #fff;
+  text-shadow: 0 1px 8px var(--dz-shadow);
+}
+
+/* Selected: solid white card, green type (beats the per-vibe glows) */
+#screen-duration .dur-pill.selected {
+  background: #fff !important;
+  border-color: #fff !important;
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 18px 40px rgba(28, 70, 120, 0.28) !important;
+}
+#screen-duration .dur-pill.selected .pill-time,
+#screen-duration .dur-pill.selected .pill-tag,
+#screen-duration .dur-pill.selected .pill-unit,
+#screen-duration .dur-pill.selected #custom-minutes {
+  color: var(--dz-green);
+  text-shadow: none;
+}
+#screen-duration .dur-pill.selected .pill-hairline { background-color: rgba(91, 135, 92, 0.35) !important; }
+
+/* "Recommended" as a small pill instead of the gold ribbon */
+#screen-duration .pill-ribbon {
+  top: 12px;
+  right: 12px;
+  transform: none;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--dz-green);
+  font-family: var(--dz-body) !important;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  box-shadow: 0 4px 12px rgba(28, 70, 120, 0.18);
+}
+#screen-duration .dur-pill.selected .pill-ribbon {
+  background: var(--dz-green);
+  color: #fff;
+}
+
+/* Custom minutes */
+#screen-duration #custom-minutes {
+  font-family: var(--dz-display);
+  font-style: normal;
+  font-weight: 900;
+  font-size: 2.4rem;
+  width: 72px;
+  color: #fff;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.6);
+}
+#screen-duration #custom-minutes:focus { border-color: #fff; }
+#screen-duration .dur-pill.selected #custom-minutes { border-color: rgba(91, 135, 92, 0.55); }
+#screen-duration .pill-unit {
+  font-family: var(--dz-body) !important;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+/* ── Start: the hero's white pill ────────────────────────── */
+#screen-duration .btn-start {
+  width: 100%;
+  min-height: 62px;
+  padding: 0 2rem;
+  border: none;
+  background: #fff;
+  color: var(--dz-green);
+  box-shadow: 0 12px 30px rgba(28, 70, 120, 0.24);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+#screen-duration .btn-start-label {
+  font-family: var(--dz-body) !important;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+#screen-duration .btn-start svg { color: var(--dz-green); }
+#screen-duration .btn-start-pulse { display: none; }
+#screen-duration .btn-start:not(:disabled):hover {
+  background: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 16px 36px rgba(28, 70, 120, 0.3);
+}
+#screen-duration .btn-start:disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(91, 135, 92, 0.6);
+  box-shadow: none;
+}
+#screen-duration .btn-start:disabled svg { color: rgba(91, 135, 92, 0.6); }
+
+/* ══════════════════════════════════════════════════════════
+   Tablets & phones
+══════════════════════════════════════════════════════════ */
+@media (max-width: 968px) {
+  #screen-duration { padding: 0; }
+  #screen-duration .dur-split-container { position: relative; }
+  #screen-duration .dur-left-panel {
+    min-height: 0 !important;
+    padding: 76px 16px 4px !important;
+  }
+  #screen-duration .glass-dial-orb {
+    width: 220px !important;
+    height: 220px !important;
+  }
+  #screen-duration .tick { transform-origin: 50% 94px; } /* 220/2 − 16 */
+  #screen-duration .dial-display-time { font-size: 4.6rem; }
+  #screen-duration .dial-eyebrow { font-size: 15px; }
+  #screen-duration .dial-unit { font-size: 13px; }
+
+  #screen-duration .dur-right-panel {
+    padding: 20px 16px 24px !important;
+    overflow: visible;
+  }
+  /* Back sits at the top-left of the screen on small layouts */
+  #screen-duration .btn-back {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 3;
+    margin: 0;
+  }
+  #screen-duration .dur-intro { text-align: center; }
+  #screen-duration .dur-heading {
+    font-size: clamp(1.7rem, 8vw, 2.3rem) !important;
+    line-height: 1.02 !important;
+    margin-bottom: 0 !important;
+  }
+  #screen-duration .dur-subtitle { font-size: 16px; }
+
+  /* Two columns: 25 across the top, then pairs */
+  #screen-duration .dur-pills { gap: 12px; margin: 1.25rem 0 1.25rem; }
+  #screen-duration #dur-25 { grid-column: span 12 !important; }
+  #screen-duration #dur-45,
+  #screen-duration #dur-60,
+  #screen-duration #dur-90,
+  #screen-duration #dur-custom { grid-column: span 6 !important; }
+  #screen-duration .dur-pill { padding: 1rem 0.75rem; border-radius: 18px; }
+  #screen-duration .pill-time { font-size: 2.4rem; }
+  #screen-duration .preset-hero .pill-time { font-size: 2.8rem; }
+  #screen-duration .pill-tag { font-size: 13.5px; }
+  #screen-duration #custom-minutes { font-size: 2rem; width: 60px; }
+
+  /* Start stays reachable while scrolling */
+  #screen-duration .btn-start {
+    position: sticky;
+    bottom: 16px;
+    z-index: 2;
+    min-height: 56px;
+    font-size: 1rem !important;
+    padding: 0 1.5rem !important;
+  }
+  #screen-duration .btn-start:disabled {
+    background: rgba(255, 255, 255, 0.86);
+    color: rgba(91, 135, 92, 0.6);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+  #screen-duration .btn-start:disabled svg { color: rgba(91, 135, 92, 0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #screen-duration .dial-orbit-track { animation: none; }
+  #screen-duration .dur-pill,
+  #screen-duration .btn-start,
+  #screen-duration .btn-back { transition: none; }
+}

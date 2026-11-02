@@ -165,13 +165,13 @@ function startHeroFocusSession(vidId = 0) {
   bodyEl.classList.add('vibe-selected-' + state.vibe);
 
   const variantSubtitles = {
-    candle: 'SET HOW LONG THE FLAME WILL BURN.',
-    tree: 'SET HOW LONG THE ROOTS WILL GROW.',
-    ice: 'SET HOW LONG THE STILLNESS WILL LAST.',
-    gallery: 'SET HOW LONG THE CANVAS WILL REVEAL.'
+    candle: 'Set how long the flame will burn.',
+    tree: 'Set how long the roots will grow.',
+    ice: 'Set how long the stillness will last.',
+    gallery: 'Set how long the canvas will reveal.'
   };
   const durSubtitle = document.getElementById('dur-variant-subtitle');
-  if (durSubtitle) durSubtitle.textContent = variantSubtitles[state.vibe] || 'SELECT A DURATION TO ALLOCATE YOUR ATTENTION.';
+  if (durSubtitle) durSubtitle.textContent = variantSubtitles[state.vibe] || 'Select a duration to allocate your attention.';
 
   if (typeof gtag === 'function') gtag('event', 'vibe_selected', { vibe: state.vibe, source: 'hero' });
 
