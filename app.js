@@ -2155,9 +2155,9 @@ function drawLeaf(ctx, x, y, size, color, rot, alpha) {
 /* ══════════════════════════════════════════════════════════
    GALLERY — The painting is painted in over the session
    A framed canvas hangs on a gallery wall under a picture light.
-   Over the session the painting slowly emerges from the primed
-   canvas in soft, drifting areas, finishing exactly at 00:00,
-   when the museum label appears.
+   Over the session, splashes of water land on the paper one by one,
+   each uncovering the part of the painting it touches, until the whole
+   painting is revealed exactly at 00:00 and the museum label appears.
 ══════════════════════════════════════════════════════════ */
 
 const GALLERY = {
@@ -2240,47 +2240,122 @@ function galleryReset() {
   GALLERY.caches = new WeakMap();
 }
 
-/* ── Soft reveal order ──
-   A smooth, low-frequency field (like mist thinning) that decides when
-   each part of the painting emerges. Gentle centre bias so the heart of
-   the picture appears a little earlier; equalised so the revealed area
-   grows evenly with the timer. */
-function _galleryBuildField(aspect, seed) {
-  const FW = 160;
-  const FH = Math.max(48, Math.round(FW / aspect));
+/* ── Water-splash reveal ("secret paper") ──
+   Splashes of water land one at a time on the paper covering the painting.
+   Each soaks outward over about a second and uncovers only the part of the
+   painting it touches. Splash sizes adapt to the paper still dry, and the
+   last splashes seek out the remaining gaps, so the whole painting is
+   uncovered exactly at 00:00. Placement runs on a coarse coverage grid;
+   the splashes themselves are drawn as smooth vector shapes. */
+function _galleryBuildField(aspect, seed, totalSeconds) {
+  const total = Math.max(10, totalSeconds || 60);
+  const FW = 200;
+  const FH = Math.max(60, Math.round(FW / aspect));
+  const n = FW * FH;
   const rng = _galleryRng(seed);
-  // value-noise lattice
-  const G = 64;
-  const lat = new Float32Array(G * G);
-  for (let i = 0; i < lat.length; i++) lat[i] = rng();
-  const ox = rng() * 16, oy = rng() * 16;
-  const vn = (x, y) => {
-    const xi = Math.floor(x), yi = Math.floor(y);
-    const xf = x - xi, yf = y - yi;
-    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
-    const at = (a, b) => lat[((b & (G - 1)) * G) + (a & (G - 1))];
-    const a0 = at(xi, yi), a1 = at(xi + 1, yi), b0 = at(xi, yi + 1), b1 = at(xi + 1, yi + 1);
-    return (a0 + (a1 - a0) * u) + ((b0 + (b1 - b0) * u) - (a0 + (a1 - a0) * u)) * v;
-  };
-  const field = new Float32Array(FW * FH);
-  for (let y = 0; y < FH; y++) {
-    for (let x = 0; x < FW; x++) {
-      // square noise cells in image space, ~2.4 cells across
-      const px = x / FW * 2.4 + ox;
-      const py = y / FH * 2.4 / aspect + oy;
-      let n = 0, amp = 0.55, f = 1, tot = 0;
-      for (let o = 0; o < 3; o++) { n += vn(px * f, py * f) * amp; tot += amp; amp *= 0.45; f *= 2.1; }
-      n /= tot;
-      const dx = x / FW - 0.5, dy = (y / FH - 0.48) / aspect;
-      const centre = Math.sqrt(dx * dx + dy * dy);
-      field[y * FW + x] = n * 0.7 + centre * 0.55;
+  const t = new Float32Array(n).fill(Infinity);
+  const splashes = [];
+
+  // Splash count scales with session length but grows slower than it, so
+  // short sessions stay lively and long ones don't dissolve into confetti:
+  // 1 min → 24 (every ~2.5 s), 25 min → ~141 (~11 s), 120 min → ~334 (~21 s)
+  const minutes = total / 60;
+  const N = Math.max(12, Math.round(24 * Math.pow(minutes, 0.55)));
+  const soakP = Math.min(0.02, 1.2 / total);                       // spreads over ~1.2 s
+  const edgeP = Math.min(0.01, 0.45 / total);                      // each cell fades in ~0.45 s
+  const lastT = 1 - soakP - edgeP - Math.min(0.01, 0.3 / total);
+  let uncovered = n;
+
+  const stamp = (cx, cy, rad, lobes, ti, delayBase, isMain) => {
+    const reach = rad * 1.4;
+    const x0 = Math.max(0, Math.floor(cx - reach)), x1 = Math.min(FW - 1, Math.ceil(cx + reach));
+    const y0 = Math.max(0, Math.floor(cy - reach)), y1 = Math.min(FH - 1, Math.ceil(cy + reach));
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx, dy = y - cy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        let rr = rad;
+        if (lobes) {
+          const th = Math.atan2(dy, dx);
+          rr *= 1 + lobes[0] * Math.sin(3 * th + lobes[1]) + lobes[2] * Math.sin(5 * th + lobes[3]) + lobes[4] * Math.sin(9 * th + lobes[5]);
+        }
+        const dn = d / rr;
+        if (dn >= 1) continue;
+        const o = y * FW + x;
+        const tc = ti + soakP * (delayBase + (1 - delayBase) * Math.pow(dn, 0.8));
+        if (tc < t[o]) {
+          if (t[o] === Infinity) uncovered--;
+          t[o] = tc;
+        }
+      }
     }
+  };
+
+  for (let i = 0; i < N; i++) {
+    const ti = lastT * (i + 1) / N;
+    const remaining = N - i;
+    // Size the splash for the paper still dry (with some overlap)
+    const area = (uncovered / remaining) * 1.9;
+    const r = Math.max(2.5, Math.min(FW * 0.22, Math.sqrt(area / Math.PI) * (0.8 + rng() * 0.45)));
+    // Choose where it lands: prefer dry paper; late on, aim straight at gaps
+    let cx = 0, cy = 0;
+    if (uncovered > 0 && (uncovered < n * 0.3 || remaining <= 6)) {
+      let k = Math.floor(rng() * uncovered);
+      for (let o = 0; o < n; o++) {
+        if (t[o] === Infinity && k-- === 0) { cx = o % FW; cy = Math.floor(o / FW); break; }
+      }
+    } else {
+      let best = -1;
+      for (let k = 0; k < 16; k++) {
+        const x = rng() * FW, y = rng() * FH;
+        const o = Math.floor(y) * FW + Math.floor(x);
+        // dryness of a small neighbourhood
+        let dry = 0;
+        for (let oy = -2; oy <= 2; oy += 2) for (let ox = -2; ox <= 2; ox += 2) {
+          const xx = Math.min(FW - 1, Math.max(0, Math.floor(x) + ox * Math.ceil(r / 3)));
+          const yy = Math.min(FH - 1, Math.max(0, Math.floor(y) + oy * Math.ceil(r / 3)));
+          if (t[yy * FW + xx] === Infinity) dry++;
+        }
+        const score = dry + (t[o] === Infinity ? 3 : 0) + rng() * 1.5;
+        if (score > best) { best = score; cx = x; cy = y; }
+      }
+    }
+    const lobes = [0.10 + rng() * 0.12, rng() * 6.28, 0.06 + rng() * 0.08, rng() * 6.28, 0.03 + rng() * 0.05, rng() * 6.28];
+    stamp(cx, cy, r, lobes, ti, 0, true);
+    // Satellite droplets thrown out by the impact
+    const satList = [];
+    const sats = 2 + Math.floor(rng() * 6);
+    for (let s2 = 0; s2 < sats; s2++) {
+      const a = rng() * Math.PI * 2;
+      const dist = r * (1.1 + rng() * 0.8);
+      const sr = Math.max(1.2, r * (0.07 + rng() * 0.16));
+      const sx = cx + Math.cos(a) * dist, sy = cy + Math.sin(a) * dist;
+      stamp(sx, sy, sr, null, ti, 0.5, false);
+      satList.push({ x: sx, y: sy, r: sr });
+    }
+    splashes.push({ t: ti, x: cx, y: cy, r, lobes, sats: satList });
   }
-  // Equalise by rank so the revealed area grows steadily with the timer
-  const order = Array.from(field.keys()).sort((a, b) => field[a] - field[b]);
-  const out = new Float32Array(field.length);
-  for (let r = 0; r < order.length; r++) out[order[r]] = r / (order.length - 1);
-  return { FW, FH, field: out };
+  // The thin gaps left between splashes are finished by a fine spray of
+  // droplets spread over the last ~10% of the session (not all at once)
+  const spray = [];
+  for (let o = 0; o < n; o++) {
+    if (t[o] !== Infinity) continue;
+    const x = o % FW, y = Math.floor(o / FW);
+    const lobes = [0.08, rng() * 6.28, 0.05, rng() * 6.28, 0.03, rng() * 6.28];
+    stamp(x, y, 4.5, lobes, lastT, 0, true);   // mark covered; real times set below
+    spray.push({ x, y, r: 4.5, lobes, sats: [] });
+  }
+  for (let k = spray.length - 1; k > 0; k--) {
+    const m = Math.floor(rng() * (k + 1));
+    [spray[k], spray[m]] = [spray[m], spray[k]];
+  }
+  const sprayStart = lastT - Math.min(0.1, lastT * 0.1);
+  spray.forEach((d, k) => {
+    d.t = sprayStart + (lastT - sprayStart) * (k + 1) / spray.length;
+    splashes.push(d);
+  });
+  splashes.sort((a, b) => a.t - b.t);
+  return { FW, FH, splashes, soakP, total, dryP: Math.min(0.06, 6 / total) };
 }
 
 function _galleryLayout(W, H, img) {
@@ -2288,12 +2363,12 @@ function _galleryLayout(W, H, img) {
   const isPreview = W < 300;
   const aspect = img.width / img.height;
   const border = isPreview ? Math.max(4, W * 0.035) : Math.max(12, Math.min(42, Math.min(W, H) * 0.042));
-  const maxW = W * (isPreview ? 0.86 : portrait ? 0.84 : 0.66) - border * 2;
-  const maxH = H * (isPreview ? 0.70 : portrait ? 0.60 : 0.64) - border * 2;
+  const maxW = W * (isPreview ? 0.86 : portrait ? 0.86 : 0.80) - border * 2;
+  const maxH = H * (isPreview ? 0.70 : portrait ? 0.62 : 0.78) - border * 2;
   let iw = maxW, ih = maxW / aspect;
   if (ih > maxH) { ih = maxH; iw = maxH * aspect; }
   const cx = W / 2;
-  const cy = H * (isPreview ? 0.5 : portrait ? 0.44 : 0.46);
+  const cy = H * (isPreview ? 0.5 : portrait ? 0.44 : 0.47);
   return {
     W, H, border, isPreview,
     ix: Math.round(cx - iw / 2), iy: Math.round(cy - ih / 2), iw: Math.round(iw), ih: Math.round(ih),
@@ -2432,21 +2507,23 @@ function drawGallery(ctx, W, H, p, time) {
 
   if (GALLERY.loaded) {
     const img = GALLERY.image;
-    if (!GALLERY.field) GALLERY.field = _galleryBuildField(img.width / img.height, GALLERY.seed);
+    const sessionSecs = state.totalSeconds || 60;
+    if (!GALLERY.field || GALLERY.field.total !== Math.max(10, sessionSecs)) {
+      GALLERY.field = _galleryBuildField(img.width / img.height, GALLERY.seed, sessionSecs);
+      GALLERY.caches = new WeakMap();
+    }
 
     const dpr = (ctx.getTransform ? ctx.getTransform().a : 1) || 1;
     let C = GALLERY.caches.get(ctx.canvas);
     if (!C || C.W !== W || C.H !== H || C.dpr !== dpr || C.img !== img) {
       const L = _galleryLayout(W, H, img);
       const mk = () => { const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(L.iw * dpr)); c.height = Math.max(1, Math.round(L.ih * dpr)); return c; };
-      const F = GALLERY.field;
-      const small = document.createElement('canvas');
-      small.width = F.FW; small.height = F.FH;
       C = {
         W, H, dpr, img, L,
         stat: _galleryBuildStatic(L, dpr),
         colorLayer: mk(),
-        small, smallCtx: small.getContext('2d'), smallData: small.getContext('2d').createImageData(F.FW, F.FH),
+        mask: mk(), rims: mk(), work: mk(),
+        committed: 0,       // splashes fully drawn into mask/rims
         lastP: -1,
       };
       GALLERY.caches.set(ctx.canvas, C);
@@ -2456,41 +2533,91 @@ function drawGallery(ctx, W, H, p, time) {
     // The final stroke lands exactly as the timer reaches 00:00
     const pc = isPreview ? Math.min(1, p * 1.1) : Math.min(1, p);
 
-    // Rebuild the paint masks only when progress has moved enough to matter
-    if (Math.abs(pc - C.lastP) > (isPreview ? 0.01 : 0.0004) || C.lastP < 0) {
-      const F = GALLERY.field;
-      const paintLayer = (layer, source, prog, scale, offset, band) => {
-        const d = C.smallData.data;
-        const f = F.field;
-        const pp = prog * (1 + band);
-        // the whole picture also surfaces faintly and steadily, like a photograph developing
-        const ghost = 0.3 * Math.pow(prog, 1.2);
-        for (let i = 0, j = 3; i < f.length; i++, j += 4) {
-          const fv = f[i] * scale + offset;
-          let a = (pp - fv) / band;
-          a = a < 0 ? 0 : a > 1 ? 1 : a;
-          const sm = a * a * (3 - 2 * a);
-          d[j] = (sm + (1 - sm) * ghost) * 255;
+    // Paint the splashes: finished ones are baked into the mask once; the
+    // one or two still soaking/drying are drawn fresh each update.
+    const F = GALLERY.field;
+    if (C.lastP < 0 || Math.abs(pc - C.lastP) > (isPreview ? 0.004 : Math.max(0.00004, 0.05 / F.total))) {
+      const soakP = isPreview ? 0.03 : F.soakP;
+      const dryP = isPreview ? 0.06 : F.dryP;
+      const kx = C.colorLayer.width / F.FW, ky = C.colorLayer.height / F.FH;
+      const blob = (x2, sp, scale, grow) => {
+        const cx = sp.x * kx, cy = sp.y * ky, r = sp.r * kx * grow * 1.06;
+        x2.beginPath();
+        const steps = 56;
+        for (let k = 0; k <= steps; k++) {
+          const th = (k / steps) * Math.PI * 2;
+          const L2 = sp.lobes;
+          const rr = r * (1 + L2[0] * Math.sin(3 * th + L2[1]) + L2[2] * Math.sin(5 * th + L2[3]) + L2[4] * Math.sin(9 * th + L2[4 + 1])) * scale;
+          const px = cx + Math.cos(th) * rr, py = cy + Math.sin(th) * rr * (ky / kx);
+          if (k === 0) x2.moveTo(px, py); else x2.lineTo(px, py);
         }
-        C.smallCtx.putImageData(C.smallData, 0, 0);
-        const lx = layer.getContext('2d');
-        lx.globalCompositeOperation = 'source-over';
-        lx.clearRect(0, 0, layer.width, layer.height);
-        lx.imageSmoothingEnabled = true;
-        lx.imageSmoothingQuality = 'high';
-        lx.drawImage(C.small, 0, 0, layer.width, layer.height);
-        lx.globalCompositeOperation = 'source-in';
-        lx.drawImage(source, 0, 0, layer.width, layer.height);
-        lx.globalCompositeOperation = 'source-over';
+        x2.closePath();
+        for (const st of sp.sats) {
+          // droplets fly out a moment after the main splash lands
+          const sg = Math.max(0, (grow - 0.35) / 0.65);
+          if (sg <= 0) continue;
+          x2.moveTo(st.x * kx + st.r * kx * 1.06 * sg, st.y * ky);
+          x2.arc(st.x * kx, st.y * ky, st.r * kx * 1.06 * sg, 0, Math.PI * 2);
+        }
       };
-      // Each area fades in slowly over a long, soft band of the session,
-      // so the painting emerges gradually — no hard edges or flicker
-      paintLayer(C.colorLayer, img, pc, 1.0, 0.0, 0.22);
+      const ease = (u) => 1 - Math.pow(1 - Math.min(1, Math.max(0, u)), 3);
+      const mx = C.mask.getContext('2d'), rx = C.rims.getContext('2d');
+      // Timer moved backwards (restart / preview loop): rebuild from scratch
+      if (pc < C.lastP - 1e-6) {
+        mx.clearRect(0, 0, C.mask.width, C.mask.height);
+        rx.clearRect(0, 0, C.rims.width, C.rims.height);
+        C.committed = 0;
+      }
+      const list = F.splashes;
+      const lw = Math.max(1, C.colorLayer.width / 420);
+      // Bake splashes that have finished soaking and drying
+      while (C.committed < list.length && list[C.committed].t + soakP + dryP <= pc) {
+        const sp = list[C.committed++];
+        mx.fillStyle = '#000';
+        blob(mx, sp, 1, 1); mx.fill();
+        rx.strokeStyle = 'rgba(48, 32, 18, 0.55)';
+        rx.lineWidth = lw * 1.4;
+        blob(rx, sp, 0.985, 1); rx.stroke();
+      }
+      // Compose: baked mask + live splashes, then the painting through it
+      const wx = C.work.getContext('2d');
+      const lx = C.colorLayer.getContext('2d');
+      lx.globalCompositeOperation = 'source-over';
+      lx.clearRect(0, 0, C.colorLayer.width, C.colorLayer.height);
+      lx.drawImage(C.mask, 0, 0);
+      wx.clearRect(0, 0, C.work.width, C.work.height);
+      const live = [];
+      for (let k = C.committed; k < list.length && list[k].t <= pc; k++) live.push(list[k]);
+      for (const sp of live) {
+        const grow = ease((pc - sp.t) / soakP);
+        lx.fillStyle = '#000';
+        // soft leading edge while it spreads
+        lx.globalAlpha = 0.55; blob(lx, sp, 1.0, grow); lx.fill();
+        lx.globalAlpha = 1.0;  blob(lx, sp, 0.94, grow); lx.fill();
+        // fresh water darkens the paper, drying over a few seconds
+        const wet = 1 - Math.min(1, Math.max(0, (pc - sp.t - soakP) / dryP));
+        wx.fillStyle = `rgba(30, 20, 12, ${0.38 * wet + 0.08})`;
+        blob(wx, sp, 1.0, grow); wx.fill();
+        wx.strokeStyle = 'rgba(48, 32, 18, 0.55)';
+        wx.lineWidth = lw * 1.4;
+        blob(wx, sp, 0.985, grow); wx.stroke();
+      }
+      lx.globalCompositeOperation = 'source-in';
+      lx.drawImage(img, 0, 0, C.colorLayer.width, C.colorLayer.height);
+      // watercolour tide-lines (fade away near the end) and wet sheen
+      lx.globalCompositeOperation = 'source-atop';
+      const rimFade = 1 - Math.max(0, Math.min(1, (pc - 0.85) / 0.15));
+      if (rimFade > 0.01) { lx.globalAlpha = 0.45 * rimFade; lx.drawImage(C.rims, 0, 0); lx.globalAlpha = 1; }
+      lx.drawImage(C.work, 0, 0);
+      lx.globalCompositeOperation = 'source-over';
       C.lastP = pc;
     }
+    // Safety: at 00:00 the painting is shown whole, with no hairline gaps
+    const finalFade = isPreview ? 0 : Math.max(0, Math.min(1, (pc - 0.995) / 0.005));
 
     ctx.drawImage(C.stat, 0, 0, W, H);
     ctx.drawImage(C.colorLayer, L.ix, L.iy, L.iw, L.ih);
+    if (finalFade > 0) { ctx.globalAlpha = finalFade; ctx.drawImage(img, L.ix, L.iy, L.iw, L.ih); ctx.globalAlpha = 1; }
     _galleryLightOverlay(ctx, L);
 
     // ── Museum label, placed on the wall beneath the frame ──
