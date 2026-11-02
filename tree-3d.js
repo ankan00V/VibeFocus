@@ -13,9 +13,77 @@ let activeLeafCount = 8000; // Will scale dynamically based on timer duration
 let lastTotalSecondsForLeaves = 0;
 
 const MAX_LEAVES = 8000;
-const TREE_COLOR = 0x0a0f12; // Dark obsidian
-const LEAF_COLOR = 0xa8d870; // Glowing ethereal green
-const LEAF_EMISSIVE = 0x55aa33;
+// Golden-hour autumn palette
+const SUN_DIR = new THREE.Vector3(-0.55, 0.20, -0.81).normalize(); // low sun behind the tree
+const SUN_COLOR = new THREE.Color(1.0, 0.78, 0.52);
+// Sky colours are display-space: three r128 applies fog after tone mapping,
+// so the fog must use the same displayed horizon colour for a seamless horizon.
+const HORIZON_COLOR = new THREE.Color(0.84, 0.69, 0.56);
+const ZENITH_COLOR = new THREE.Color(0.38, 0.50, 0.68);
+let treeSunLight = null;
+let leafTranslucencyUniforms = null;
+
+// Procedural canvas textures (no external assets needed)
+function makeTreeCanvasTexture(size, paint) {
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    paint(c.getContext('2d'), size);
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.encoding = THREE.sRGBEncoding;
+    tex.anisotropy = 4;
+    return tex;
+}
+
+function makeBarkTexture() {
+    return makeTreeCanvasTexture(256, (x, n) => {
+        x.fillStyle = '#4a3a2e';
+        x.fillRect(0, 0, n, n);
+        // vertical furrows of bark
+        for (let i = 0; i < 140; i++) {
+            const px = Math.random() * n;
+            const w = 1 + Math.random() * 4;
+            const l = 20 + Math.random() * 90;
+            const py = Math.random() * n;
+            const shade = Math.random() < 0.5 ? 'rgba(25,18,13,0.55)' : 'rgba(120,100,82,0.35)';
+            x.fillStyle = shade;
+            x.fillRect(px, py, w, l);
+            x.fillRect(px, py - n, w, l); // wrap
+        }
+        // lichen flecks
+        for (let i = 0; i < 60; i++) {
+            x.fillStyle = 'rgba(140,150,110,0.25)';
+            x.beginPath();
+            x.arc(Math.random() * n, Math.random() * n, 1 + Math.random() * 3, 0, Math.PI * 2);
+            x.fill();
+        }
+    });
+}
+
+function makeGroundTexture() {
+    return makeTreeCanvasTexture(512, (x, n) => {
+        x.fillStyle = '#4b5a2a';
+        x.fillRect(0, 0, n, n);
+        // patches of dry grass, earth and moss
+        const cols = ['rgba(120,110,55,0.35)', 'rgba(70,58,36,0.35)', 'rgba(52,72,30,0.45)', 'rgba(150,120,60,0.25)'];
+        for (let i = 0; i < 900; i++) {
+            x.fillStyle = cols[i % cols.length];
+            x.beginPath();
+            x.arc(Math.random() * n, Math.random() * n, 4 + Math.random() * 26, 0, Math.PI * 2);
+            x.fill();
+        }
+        // fine blades
+        for (let i = 0; i < 9000; i++) {
+            const px = Math.random() * n, py = Math.random() * n;
+            x.strokeStyle = Math.random() < 0.5 ? 'rgba(160,150,80,0.35)' : 'rgba(40,60,22,0.35)';
+            x.lineWidth = 1;
+            x.beginPath();
+            x.moveTo(px, py);
+            x.lineTo(px + (Math.random() - 0.5) * 3, py - 2 - Math.random() * 5);
+            x.stroke();
+        }
+    });
+}
 
 const FLOWER_VERTEX_SHADER = `
     varying vec2 vUv;
@@ -103,56 +171,87 @@ function initTree3D() {
     treeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     treeRenderer.shadowMap.enabled = true;
     treeRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    treeRenderer.outputEncoding = THREE.sRGBEncoding;
+    treeRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+    treeRenderer.toneMappingExposure = 1.05;
 
     treeScene = new THREE.Scene();
+    // Atmospheric haze: distant ground melts into the horizon glow
+    treeScene.fog = new THREE.Fog(HORIZON_COLOR.clone(), 50, 190);
 
     // Camera
     const aspect = canvas.clientWidth / canvas.clientHeight;
-    treeCamera = new THREE.PerspectiveCamera(45, aspect, 0.1, 100);
-    // Position camera to see the full tree and ground
-    treeCamera.position.set(0, 20, 65);
-    treeCamera.lookAt(0, 12, 0);
+    treeCamera = new THREE.PerspectiveCamera(40, aspect, 0.1, 400);
+    frameTreeCamera(aspect);
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    treeScene.add(ambientLight);
+    // Lighting: low golden sun behind the tree, cool sky fill, warm bounce
+    const hemi = new THREE.HemisphereLight(0x9fb6d6, 0x5a4a30, 0.55);
+    treeScene.add(hemi);
 
-    const rimLight = new THREE.DirectionalLight(0xbbeeff, 2.5);
-    rimLight.position.set(-10, 20, -10);
-    treeScene.add(rimLight);
+    treeSunLight = new THREE.DirectionalLight(SUN_COLOR, 2.4);
+    treeSunLight.position.copy(SUN_DIR).multiplyScalar(60);
+    treeSunLight.castShadow = true;
+    const isSmall = Math.min(window.innerWidth, window.innerHeight) < 700;
+    treeSunLight.shadow.mapSize.width = isSmall ? 1024 : 2048;
+    treeSunLight.shadow.mapSize.height = isSmall ? 1024 : 2048;
+    treeSunLight.shadow.camera.near = 10;
+    treeSunLight.shadow.camera.far = 130;
+    treeSunLight.shadow.camera.left = -40;
+    treeSunLight.shadow.camera.right = 40;
+    treeSunLight.shadow.camera.top = 40;
+    treeSunLight.shadow.camera.bottom = -20;
+    treeSunLight.shadow.bias = -0.0008;
+    treeSunLight.shadow.normalBias = 0.04;
+    treeScene.add(treeSunLight);
 
-    const fillLight = new THREE.DirectionalLight(0xaaffcc, 1.2);
-    fillLight.position.set(15, 25, 15);
-    fillLight.castShadow = true;
-    fillLight.shadow.mapSize.width = 1024;
-    fillLight.shadow.mapSize.height = 1024;
-    fillLight.shadow.camera.near = 0.5;
-    fillLight.shadow.camera.far = 100;
-    fillLight.shadow.camera.left = -25;
-    fillLight.shadow.camera.right = 25;
-    fillLight.shadow.camera.top = 25;
-    fillLight.shadow.camera.bottom = -25;
-    fillLight.shadow.bias = -0.001;
-    treeScene.add(fillLight);
+    // Soft front fill so the shaded side of the tree isn't black
+    const frontFill = new THREE.DirectionalLight(0xffe2c4, 0.35);
+    frontFill.position.set(20, 25, 50);
+    treeScene.add(frontFill);
 
-    // Magical core light inside the tree
-    const coreLight = new THREE.PointLight(LEAF_COLOR, 3, 25);
-    coreLight.position.set(0, 12, 0);
-    treeScene.add(coreLight);
-
-    // Stars Background
-    const starsGeo = new THREE.BufferGeometry();
-    const starsCount = 1500;
-    const starPos = new Float32Array(starsCount * 3);
-    for(let i=0; i<starsCount; i++) {
-        starPos[i*3] = (Math.random() - 0.5) * 300;
-        starPos[i*3+1] = Math.random() * 150;
-        starPos[i*3+2] = (Math.random() - 0.5) * 300 - 50;
-    }
-    starsGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
-    const starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.6, transparent: true, opacity: 0.8 });
-    const starParticles = new THREE.Points(starsGeo, starsMat);
-    treeScene.add(starParticles);
+    // Sky dome: deep blue overhead, glowing warm horizon, soft sun halo
+    const skyGeo = new THREE.SphereGeometry(300, 48, 24);
+    const skyMat = new THREE.ShaderMaterial({
+        uniforms: {
+            uSunDir: { value: SUN_DIR },
+            uHorizon: { value: HORIZON_COLOR },
+            uZenith: { value: ZENITH_COLOR },
+            uSunCol: { value: SUN_COLOR },
+        },
+        vertexShader: `
+            varying vec3 vDir;
+            void main() {
+                vDir = normalize(position);
+                vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                gl_Position = p.xyww;
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 uSunDir;
+            uniform vec3 uHorizon;
+            uniform vec3 uZenith;
+            uniform vec3 uSunCol;
+            varying vec3 vDir;
+            void main() {
+                vec3 d = normalize(vDir);
+                float h = clamp(d.y, -0.2, 1.0);
+                float sunAmt = max(dot(d, normalize(uSunDir)), 0.0);
+                vec3 col = mix(uHorizon, uZenith, pow(smoothstep(0.0, 0.7, h), 0.6));
+                // warmer, brighter towards the sun (fades out at the horizon line)
+                float above = smoothstep(-0.02, 0.06, d.y);
+                col += vec3(1.0, 0.86, 0.66) * (pow(sunAmt, 5.0) * 0.18 + pow(sunAmt, 40.0) * 0.35 + pow(sunAmt, 900.0) * 2.0) * mix(0.5, 1.0, above);
+                // below the horizon: the same haze the fog uses, so ground and sky meet seamlessly
+                col = mix(col, uHorizon, smoothstep(0.03, -0.02, d.y));
+                gl_FragColor = vec4(min(col, vec3(1.0)), 1.0);
+            }
+        `,
+        side: THREE.BackSide,
+        depthWrite: false,
+        toneMapped: false,
+    });
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    sky.renderOrder = -1;
+    treeScene.add(sky);
 
     // Tree Group
     treeGroup = new THREE.Group();
@@ -178,7 +277,7 @@ function initTree3D() {
     const fireflyMat = new THREE.ShaderMaterial({
         uniforms: {
             uTime: { value: 0 },
-            uColor: { value: new THREE.Color(LEAF_COLOR) }
+            uColor: { value: new THREE.Color(1.0, 0.86, 0.6) }
         },
         vertexShader: `
             uniform float uTime;
@@ -192,10 +291,9 @@ function initTree3D() {
                 pos.z += sin(uTime * 0.5 + aPhase) * 1.5;
                 vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
                 gl_Position = projectionMatrix * mvPosition;
-                // Size attenuation
-                gl_PointSize = 25.0 * (10.0 / -mvPosition.z);
-                // Pulsating alpha
-                vAlpha = (sin(uTime * 1.5 + aPhase) * 0.5 + 0.5) * 0.8 + 0.2;
+                // Size attenuation: tiny motes of dust / pollen in the sun
+                gl_PointSize = 7.0 * (10.0 / -mvPosition.z) * (0.6 + 0.4 * sin(aPhase * 3.0));
+                vAlpha = (sin(uTime * 0.7 + aPhase) * 0.5 + 0.5) * 0.35 + 0.05;
             }
         `,
         fragmentShader: `
@@ -206,7 +304,7 @@ function initTree3D() {
                 if (dist > 0.5) discard;
                 // Soft glow edge
                 float intensity = pow(1.0 - (dist * 2.0), 2.0);
-                gl_FragColor = vec4(uColor * intensity, vAlpha * intensity);
+                gl_FragColor = vec4(uColor * intensity * vAlpha, 1.0);
             }
         `,
         transparent: true,
@@ -217,10 +315,15 @@ function initTree3D() {
     treeScene.add(fireflyParticles);
 
     // Material for Tree
+    const barkTex = makeBarkTexture();
+    barkTex.repeat.set(2, 3);
     const treeMat = new THREE.MeshStandardMaterial({
-        color: TREE_COLOR,
-        metalness: 0.1,
-        roughness: 0.85
+        color: 0xffffff,
+        map: barkTex,
+        bumpMap: barkTex,
+        bumpScale: 0.25,
+        metalness: 0.0,
+        roughness: 0.95
     });
 
     // Procedural Tree Generation
@@ -239,7 +342,7 @@ function initTree3D() {
         );
 
         // Cylinder for this branch
-        const geom = new THREE.CylinderGeometry(radius * 0.6, radius, length, 7);
+        const geom = new THREE.CylinderGeometry(radius * 0.62, radius, length, 12, 1);
         // Translate cylinder so origin is at startPt
         geom.translate(0, length / 2, 0);
         
@@ -285,25 +388,47 @@ function initTree3D() {
     treeGroup.add(treeMeshGroup);
 
     // Leaves InstancedMesh - Procedural Leaf Shape
+    // Thin leaf blade with a slight fold along the midrib
     const leafShape = new THREE.Shape();
     leafShape.moveTo(0, 0);
-    leafShape.quadraticCurveTo(0.5, 0.3, 0, 1.2);
-    leafShape.quadraticCurveTo(-0.5, 0.3, 0, 0);
-    const extrudeSettings = { depth: 0.03, bevelEnabled: true, bevelSegments: 1, steps: 1, bevelSize: 0.02, bevelThickness: 0.02 };
-    const leafGeom = new THREE.ExtrudeGeometry(leafShape, extrudeSettings);
+    leafShape.bezierCurveTo(0.42, 0.18, 0.46, 0.75, 0, 1.2);
+    leafShape.bezierCurveTo(-0.46, 0.75, -0.42, 0.18, 0, 0);
+    const leafGeom = new THREE.ShapeGeometry(leafShape, 6);
+    {
+        const lp = leafGeom.attributes.position;
+        for (let k = 0; k < lp.count; k++) {
+            const lx = lp.getX(k), ly = lp.getY(k);
+            lp.setZ(k, Math.abs(lx) * 0.35 + Math.sin(ly * 2.6) * 0.06);
+        }
+        leafGeom.computeVertexNormals();
+    }
     leafGeom.center();
     // Base scale for leaves (much larger to compensate for fewer mathematically allowed leaves)
     leafGeom.scale(1.2, 1.2, 1.2);
 
     const leafMat = new THREE.MeshStandardMaterial({
         color: 0xffffff, // White base to let instance colors show
-        emissive: LEAF_EMISSIVE,
-        emissiveIntensity: 0.4,
-        roughness: 0.6,
-        metalness: 0.1,
-        transparent: true,
-        opacity: 0.95
+        roughness: 0.7,
+        metalness: 0.0,
+        side: THREE.DoubleSide
     });
+    // Thin leaves glow when the low sun shines through them
+    leafTranslucencyUniforms = {
+        uSunView: { value: new THREE.Vector3() },
+        uSunCol: { value: SUN_COLOR.clone().multiplyScalar(1.6) },
+    };
+    leafMat.onBeforeCompile = (shader) => {
+        shader.uniforms.uSunView = leafTranslucencyUniforms.uSunView;
+        shader.uniforms.uSunCol = leafTranslucencyUniforms.uSunCol;
+        shader.fragmentShader = 'uniform vec3 uSunView;\nuniform vec3 uSunCol;\n' + shader.fragmentShader;
+        shader.fragmentShader = shader.fragmentShader.replace(
+            'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
+            `vec3 vDirT = normalize(vViewPosition);
+            float back = pow(max(dot(-vDirT, normalize(uSunView)), 0.0), 3.0);
+            outgoingLight += diffuseColor.rgb * uSunCol * (0.18 + 0.9 * back);
+            gl_FragColor = vec4( outgoingLight, diffuseColor.a );`
+        );
+    };
 
     // Shuffle leafPositions so that picking a subset renders them evenly across the tree
     for (let i = leafPositions.length - 1; i > 0; i--) {
@@ -340,31 +465,24 @@ function initTree3D() {
             grounded: false,
             phase: Math.random() * Math.PI * 2,
             baseWind: { x: 0, z: 0 },
-            scale: (1.0 + Math.random() * 1.2) * sizeMultiplier
+            scale: (0.55 + Math.random() * 0.5) * sizeMultiplier
         });
 
-        // Natural leaf colors: lush green, dark mature green, old yellow
+        // Autumn palette: amber, burnt orange, rust, golden ochre, a few late greens
         let hue, saturation, lightness;
         const randColor = Math.random();
-        
-        if (randColor < 0.6) {
-            // Lush mid-green (majority)
-            hue = 0.25 + Math.random() * 0.05; // 0.25 to 0.30
-            saturation = 0.6 + Math.random() * 0.3;
-            lightness = 0.3 + Math.random() * 0.2;
-        } else if (randColor < 0.85) {
-            // Dark mature green
-            hue = 0.30 + Math.random() * 0.05; // 0.30 to 0.35
-            saturation = 0.4 + Math.random() * 0.3;
-            lightness = 0.15 + Math.random() * 0.15;
-        } else {
-            // Old yellow / slightly autumn
-            hue = 0.12 + Math.random() * 0.08; // 0.12 to 0.20
-            saturation = 0.7 + Math.random() * 0.3;
-            lightness = 0.4 + Math.random() * 0.2;
+        if (randColor < 0.30) {        // amber / orange
+            hue = 0.07 + Math.random() * 0.04; saturation = 0.75 + Math.random() * 0.2; lightness = 0.38 + Math.random() * 0.12;
+        } else if (randColor < 0.52) { // golden yellow / ochre
+            hue = 0.11 + Math.random() * 0.03; saturation = 0.7 + Math.random() * 0.2; lightness = 0.42 + Math.random() * 0.12;
+        } else if (randColor < 0.74) { // rust red
+            hue = 0.02 + Math.random() * 0.03; saturation = 0.65 + Math.random() * 0.2; lightness = 0.28 + Math.random() * 0.1;
+        } else if (randColor < 0.90) { // brownish
+            hue = 0.06 + Math.random() * 0.03; saturation = 0.45 + Math.random() * 0.2; lightness = 0.22 + Math.random() * 0.1;
+        } else {                       // late green
+            hue = 0.18 + Math.random() * 0.06; saturation = 0.45 + Math.random() * 0.2; lightness = 0.28 + Math.random() * 0.1;
         }
-        
-        tempColor.setHSL(hue, saturation, lightness);
+        tempColor.setHSL(hue, saturation, lightness).convertSRGBToLinear();
         leafInstancedMesh.setColorAt(i, tempColor);
 
         dummy.position.copy(pos);
@@ -378,11 +496,14 @@ function initTree3D() {
     treeGroup.add(leafInstancedMesh);
 
     // Add a dark grassy ground plane
-    const groundGeom = new THREE.PlaneGeometry(150, 150);
+    const groundGeom = new THREE.PlaneGeometry(400, 400);
+    const groundTex = makeGroundTexture();
+    groundTex.repeat.set(40, 40);
     const groundMat = new THREE.MeshStandardMaterial({
-        color: 0x051108, // Dark grass green
-        roughness: 0.9,
-        metalness: 0.1
+        color: 0xffffff,
+        map: groundTex,
+        roughness: 1.0,
+        metalness: 0.0
     });
     const ground = new THREE.Mesh(groundGeom, groundMat);
     ground.rotation.x = -Math.PI / 2;
@@ -391,24 +512,37 @@ function initTree3D() {
     treeScene.add(ground);
 
     // Grass blades
-    const grassGeo = new THREE.ConeGeometry(0.15, 1.5, 3);
-    const grassMat = new THREE.MeshStandardMaterial({ color: 0x0a1f0f, roughness: 0.9 });
-    const grassCount = 3000;
+    // Grass tufts: thin tapered blades in dry gold and late-summer green
+    const grassGeo = new THREE.PlaneGeometry(0.12, 1.5, 1, 3);
+    {
+        const gp = grassGeo.attributes.position;
+        for (let k = 0; k < gp.count; k++) {
+            const gy = (gp.getY(k) + 0.75) / 1.5;            // 0 at root, 1 at tip
+            gp.setX(k, gp.getX(k) * (1 - gy * 0.9));          // taper
+            gp.setZ(k, gy * gy * 0.35);                        // bend
+        }
+        grassGeo.computeVertexNormals();
+    }
+    const grassMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, side: THREE.DoubleSide });
+    const grassCount = Math.min(window.innerWidth, window.innerHeight) < 700 ? 6000 : 12000;
     const grassInstanced = new THREE.InstancedMesh(grassGeo, grassMat, grassCount);
     grassInstanced.receiveShadow = true;
     
     const dummyGrass = new THREE.Object3D();
     for(let i=0; i<grassCount; i++) {
-        const r = 2 + Math.random() * 60; 
+        const r = 2 + Math.pow(Math.random(), 0.7) * 70;
         const theta = Math.random() * Math.PI * 2;
-        dummyGrass.position.set(Math.cos(theta)*r, 0.75, Math.sin(theta)*r);
+        dummyGrass.position.set(Math.cos(theta)*r, 0.7, Math.sin(theta)*r);
         dummyGrass.rotation.y = Math.random() * Math.PI;
         dummyGrass.rotation.x = (Math.random() - 0.5) * 0.4;
         dummyGrass.rotation.z = (Math.random() - 0.5) * 0.4;
         dummyGrass.scale.setScalar(0.3 + Math.random() * 0.8);
         dummyGrass.updateMatrix();
         grassInstanced.setMatrixAt(i, dummyGrass.matrix);
+        const gc = new THREE.Color().setHSL(0.12 + Math.random() * 0.12, 0.35 + Math.random() * 0.25, 0.25 + Math.random() * 0.18).convertSRGBToLinear();
+        grassInstanced.setColorAt(i, gc);
     }
+    grassInstanced.instanceColor.needsUpdate = true;
     treeScene.add(grassInstanced);
 
     // Flower Pool Creation
@@ -477,10 +611,24 @@ function initTree3D() {
         if (!canvas) return;
         const width = canvas.clientWidth;
         const height = canvas.clientHeight;
+        if (!width || !height) return;
         treeRenderer.setSize(width, height, false);
-        treeCamera.aspect = width / height;
-        treeCamera.updateProjectionMatrix();
+        frameTreeCamera(width / height);
     });
+}
+
+// Fit the whole crown on any screen shape (portrait phones included)
+function frameTreeCamera(aspect) {
+    if (!treeCamera) return;
+    treeCamera.aspect = aspect;
+    const tanV = Math.tan(THREE.MathUtils.degToRad(treeCamera.fov / 2));
+    const contentH = 34;  // ground line to above the crown
+    const contentW = 44;  // crown width plus some meadow
+    const dist = Math.max((contentH / 2) / tanV, (contentW / 2) / (tanV * aspect));
+    const target = new THREE.Vector3(0, 13, 0);
+    treeCamera.position.set(0, target.y + dist * 0.12, dist);
+    treeCamera.lookAt(target);
+    treeCamera.updateProjectionMatrix();
 }
 
 function resetTree3D() {
@@ -514,8 +662,7 @@ function renderTree3D(progress, totalSeconds) {
     const canvas = treeRenderer.domElement;
     if (canvas.clientWidth !== canvas.width || canvas.clientHeight !== canvas.height) {
         treeRenderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
-        treeCamera.aspect = canvas.clientWidth / canvas.clientHeight;
-        treeCamera.updateProjectionMatrix();
+        if (canvas.clientHeight > 0) frameTreeCamera(canvas.clientWidth / canvas.clientHeight);
     }
 
     const time = performance.now() * 0.001;
@@ -697,7 +844,7 @@ function renderTree3D(progress, totalSeconds) {
             // --- BOUNDARY LOGIC ---
             // Keep leaves within screen bounds. Bounce them if they hit the invisible walls.
             const BOUND_X = 35;
-            const BOUND_Z_FRONT = 45; // Camera is at z=65
+            const BOUND_Z_FRONT = 28; // keep falling leaves well in front of the camera
             const BOUND_Z_BACK = -25;
             
             if (leaf.pos.x > BOUND_X) {
@@ -775,5 +922,8 @@ function renderTree3D(progress, totalSeconds) {
     }
     bloomedCount = currentBloomed;
 
+    if (leafTranslucencyUniforms) {
+        leafTranslucencyUniforms.uSunView.value.copy(SUN_DIR).transformDirection(treeCamera.matrixWorldInverse);
+    }
     treeRenderer.render(treeScene, treeCamera);
 }
