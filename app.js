@@ -119,254 +119,52 @@ const vibeLabel    = $('selected-vibe-label');
 const completeStat = $('complete-time-display');
 const fadeOverlay  = $('fade-overlay');
 
-/* ── Hero Screen Logic — Seamless Video Loop Engine ── */
+/* ══════════════════════════════════════════════════════════
+   SCREEN 0 — Landing hero (sunny hillside)
+   The scene is one still plate plus a looping video of it;
+   only the UI is animated here.
+══════════════════════════════════════════════════════════ */
 const btnHowItWorks = document.querySelectorAll('.btn-how-it-works');
 const hiwModal = document.getElementById('how-it-works-modal');
 const hiwCloseBtn = document.getElementById('hiw-close-btn');
-const heroSlots = document.querySelectorAll('.hero-vid-slot');
-const vidSwitches = document.querySelectorAll('.vid-switch');
-const heroContent = document.getElementById('hero-content');
-const heroMobileMenuBtn = document.getElementById('hero-mobile-menu-btn');
-const heroMobileMenu = document.getElementById('hero-mobile-menu');
-const heroTitle = document.getElementById('hero-title');
-const heroSubtitle = document.getElementById('hero-subtitle');
-const btnHeroStartFocus = document.getElementById('btn-hero-start');
-const mobileMenuLinks = document.querySelectorAll('.mobile-menu-links a');
+const btnBackHero = document.getElementById('btn-back-hero');
+const lpRoot = document.getElementById('lp');
+const lpVideo = lpRoot ? lpRoot.querySelector('.lp-video') : null;
+const prefersReducedMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
-if (mobileMenuLinks) {
-  mobileMenuLinks.forEach(link => {
-    link.addEventListener('click', () => {
-      if (heroMobileMenu && heroMobileMenu.classList.contains('active')) {
-        heroMobileMenu.classList.remove('active');
-        document.body.style.overflow = '';
-        heroMobileMenuBtn.classList.remove('active');
-      }
-    });
-  });
-}
-
+// Hero vibe ids (data-vid) → app vibe + display label for the duration screen
 const HERO_VIBES = [
-  {
-    vibe: 'candle',
-    title: 'A Flicker of Focus',
-    subtext: 'The world fades away as the flame burns steady. Anchor your attention and find warmth in deep work.'
-  },
-  {
-    vibe: 'ice',
-    title: 'Drop by Drop',
-    subtext: 'Time flows gently as you work. Each drop is a moment of presence, building a reservoir of accomplishment.'
-  },
-  {
-    vibe: 'tree',
-    title: 'Rooted in the Present',
-    subtext: 'Grow your ideas in the quiet of the forest. Let distractions drift away like leaves on the wind.'
-  },
-  {
-    vibe: 'gallery',
-    title: 'Canvas of Time',
-    subtext: 'Every minute is a brushstroke. Craft your masterpiece with calm, deliberate attention.'
-  }
+  { vibe: 'candle',  label: 'Candle' },
+  { vibe: 'ice',     label: 'Water Bowl' },
+  { vibe: 'tree',    label: 'Tree' },
+  { vibe: 'gallery', label: 'Gallery' }
 ];
 
-/**
- * Seamless Loop Engine
- * ────────────────────
- * Each slot has two identical <video> elements: layer-a and layer-b.
- * - Only one plays at a time (the "active" layer).
- * - When the active layer is ~CROSSFADE_LEAD seconds from ending,
- *   the standby layer starts from 0 and fades in while the active fades out.
- * - Once crossfade completes, roles swap for the next cycle.
- * - Result: zero black-flash, perfectly seamless loop.
- */
-const CROSSFADE_LEAD = 1.5;  // seconds before end to begin crossfade
-const CROSSFADE_MS   = 1400; // duration of the opacity transition
+function startHeroFocusSession(vidId = 0) {
+  const entry = HERO_VIBES[vidId] || HERO_VIBES[0];
+  state.vibe = entry.vibe;
 
-// State per slot
-const slotState = [];
-
-heroSlots.forEach((slot, idx) => {
-  const a = slot.querySelector('.layer-a');
-  const b = slot.querySelector('.layer-b');
-
-  const isMobile = window.innerWidth <= 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  if (isMobile) {
-    // Native loop fallback for mobile only to prevent freezing if network is slow
-    a.loop = true;
-    b.loop = true;
-  }
-
-  const s = {
-    slot,
-    layers: [a, b],
-    activeIdx: 0,      // which layer is currently playing (0=a, 1=b)
-    crossfading: false, // guard to prevent double-trigger
-  };
-  slotState.push(s);
-
-  // Set up timeupdate listener on both layers
-  [a, b].forEach((vid, layerIdx) => {
-    vid.addEventListener('timeupdate', () => {
-      if (s.crossfading) return;
-      if (!vid.duration || vid.duration === Infinity) return;
-      if (s.activeIdx !== layerIdx) return; // only the active layer triggers
-
-      const remaining = vid.duration - vid.currentTime;
-      
-      if (isMobile) {
-        // Preload standby video on mobile to prevent play() delays causing blank screens
-        if (remaining <= 5.0 && remaining > CROSSFADE_LEAD) {
-          const standbyVid = s.layers[s.activeIdx === 0 ? 1 : 0];
-          if (standbyVid.readyState < 3) {
-            standbyVid.load();
-          }
-        }
-      }
-
-      if (remaining <= CROSSFADE_LEAD && remaining > 0) {
-        beginCrossfade(s);
-      }
-    });
-
-    // Safety: if 'ended' fires before crossfade completes (short video edge case)
-    vid.addEventListener('ended', () => {
-      if (s.activeIdx === layerIdx && !s.crossfading) {
-        // Immediately restart this layer to avoid black
-        vid.currentTime = 0;
-        vid.play().catch(() => {});
-      }
-    });
-  });
-});
-
-function beginCrossfade(s) {
-  s.crossfading = true;
-
-  const oldIdx = s.activeIdx;
-  const newIdx = oldIdx === 0 ? 1 : 0;
-  const oldVid = s.layers[oldIdx];
-  const newVid = s.layers[newIdx];
-
-  const doFade = () => {
-    // Crossfade: bring new layer in, fade old layer out
-    newVid.style.transition = `opacity ${CROSSFADE_MS}ms ease-in-out`;
-    oldVid.style.transition = `opacity ${CROSSFADE_MS}ms ease-in-out`;
-
-    // Use rAF to ensure the transition applies after the styles are set
-    requestAnimationFrame(() => {
-      newVid.style.opacity = '1';
-      newVid.style.zIndex  = '2';
-      oldVid.style.opacity = '0';
-      oldVid.style.zIndex  = '1';
-    });
-
-    // After crossfade completes, clean up
-    setTimeout(() => {
-      oldVid.pause();
-      oldVid.currentTime = 0;
-      oldVid.style.transition = '';
-      newVid.style.transition = '';
-      s.activeIdx = newIdx;
-      s.crossfading = false;
-    }, CROSSFADE_MS + 100);
-  };
-
-  // Prepare standby layer at frame 0
-  newVid.currentTime = 0;
-
-  const isMobile = window.innerWidth <= 768 || /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-  if (!isMobile) {
-    // Desktop: Original pristine behavior. Assume instant play.
-    newVid.play().catch(() => {});
-    doFade();
-  } else {
-    // Mobile: Wait for 'playing' to guarantee no blank screens
-    if (newVid.readyState >= 3) {
-      newVid.play().catch(() => {});
-      doFade();
-    } else {
-      const onPlaying = () => {
-        newVid.removeEventListener('playing', onPlaying);
-        doFade();
-      };
-      newVid.addEventListener('playing', onPlaying);
-      newVid.play().catch(() => {});
-    }
-  }
-}
-
-// Start the first slot's video playing
-function activateSlot(idx) {
-  heroSlots.forEach((slot, i) => {
-    if (i === idx) {
-      slot.classList.add('active-slot');
-      // Play the active layer of this slot
-      const s = slotState[i];
-      const activeVid = s.layers[s.activeIdx];
-      activeVid.currentTime = 0;
-      activeVid.play().catch(() => {});
-    } else {
-      slot.classList.remove('active-slot');
-      // Pause both layers of inactive slots
-      const s = slotState[i];
-      s.layers.forEach(v => { v.pause(); v.currentTime = 0; });
-      // Reset to layer-a as primary
-      s.activeIdx = 0;
-      s.crossfading = false;
-      s.layers[0].style.opacity = '1';
-      s.layers[0].style.zIndex  = '2';
-      s.layers[1].style.opacity = '0';
-      s.layers[1].style.zIndex  = '1';
-    }
-  });
-}
-
-// Boot first slot
-activateSlot(0);
-
-function startHeroFocusSession() {
-  // Find which video slot is active
-  let activeVidId = 0;
-  vidSwitches.forEach(btn => {
-    if (btn.classList.contains('active')) {
-      activeVidId = parseInt(btn.dataset.vid, 10);
-    }
-  });
-  
-  // Set the selected vibe in the app state
-  state.vibe = HERO_VIBES[activeVidId].vibe;
-  
-  // The aesthetic names for the duration screen
-  const aestheticNames = ['Amber Flame', 'Tranquil Ripples', 'Whispering Grove', 'Dawn Canvas'];
-  
-  // Update the UI if the user ever goes to the vibe screen
+  // Keep the (hidden) vibe picker in sync
   document.querySelectorAll('.vibe-card').forEach(c => c.classList.remove('selected'));
   const selectedBtn = document.getElementById('vibe-' + state.vibe);
-  if (selectedBtn) {
-    selectedBtn.classList.add('selected');
-  } 
-  
-  // Set the duration screen label to the aesthetic name
-  vibeLabel.textContent = (aestheticNames[activeVidId] || state.vibe).toUpperCase();
-  
-  // Clear selected classes from all .dur-pill elements, reset state.minutes, and disable start button
+  if (selectedBtn) selectedBtn.classList.add('selected');
+
+  vibeLabel.textContent = entry.label.toUpperCase();
+
+  // Reset any previous duration selection
   document.querySelectorAll('.dur-pill').forEach(p => p.classList.remove('selected'));
   const screenDuration = document.getElementById('screen-duration');
   if (screenDuration) {
-    const classesToRemove = Array.from(screenDuration.classList).filter(c => c.startsWith('dur-selected-'));
-    classesToRemove.forEach(c => screenDuration.classList.remove(c));
+    Array.from(screenDuration.classList).filter(c => c.startsWith('dur-selected-')).forEach(c => screenDuration.classList.remove(c));
   }
   state.minutes = null;
   if (btnStart) btnStart.disabled = true;
   updateDialCustom('');
 
   const bodyEl = document.body;
-  if (bodyEl) {
-    const classesToRemove = Array.from(bodyEl.classList).filter(c => c.startsWith('vibe-selected-'));
-    classesToRemove.forEach(c => bodyEl.classList.remove(c));
-    bodyEl.classList.add('vibe-selected-' + state.vibe);
-  }
+  Array.from(bodyEl.classList).filter(c => c.startsWith('vibe-selected-')).forEach(c => bodyEl.classList.remove(c));
+  bodyEl.classList.add('vibe-selected-' + state.vibe);
 
-  // Update per-variant subtitle
   const variantSubtitles = {
     candle: 'SET HOW LONG THE FLAME WILL BURN.',
     tree: 'SET HOW LONG THE ROOTS WILL GROW.',
@@ -376,10 +174,31 @@ function startHeroFocusSession() {
   const durSubtitle = document.getElementById('dur-variant-subtitle');
   if (durSubtitle) durSubtitle.textContent = variantSubtitles[state.vibe] || 'SELECT A DURATION TO ALLOCATE YOUR ATTENTION.';
 
-  // Go straight to duration screen
+  if (typeof gtag === 'function') gtag('event', 'vibe_selected', { vibe: state.vibe, source: 'hero' });
+
   goTo('duration', true);
 }
 
+// "Start focus" (nav + hero) → Candle, the flagship vibe
+document.querySelectorAll('.js-start-focus').forEach(btn => {
+  btn.addEventListener('click', () => startHeroFocusSession(0));
+});
+// Vibe cards → that vibe
+document.querySelectorAll('.lp-card[data-vid]').forEach(card => {
+  card.addEventListener('click', () => startHeroFocusSession(parseInt(card.dataset.vid, 10) || 0));
+});
+// "browse all vibes" → full vibe picker (all four)
+document.querySelectorAll('.js-open-vibes').forEach(btn => {
+  btn.addEventListener('click', () => goTo('vibe'));
+});
+if (btnBackHero) btnBackHero.addEventListener('click', () => goTo('hero'));
+
+// How it works modal
+function closeHiwModal() {
+  if (!hiwModal) return;
+  hiwModal.classList.remove('active');
+  hiwModal.setAttribute('aria-hidden', 'true');
+}
 btnHowItWorks.forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.preventDefault();
@@ -387,87 +206,83 @@ btnHowItWorks.forEach(btn => {
       hiwModal.classList.add('active');
       hiwModal.setAttribute('aria-hidden', 'false');
     }
-    // Also close mobile menu if it's open
-    if (heroMobileMenu && heroMobileMenu.classList.contains('active')) {
-      heroMobileMenu.classList.remove('active');
-      document.body.style.overflow = '';
-      heroMobileMenuBtn.classList.remove('active');
-    }
   });
 });
-if (hiwCloseBtn) {
-  hiwCloseBtn.addEventListener('click', () => {
-    if (hiwModal) hiwModal.classList.remove('active');
-  });
-}
-// Close on outside click
+if (hiwCloseBtn) hiwCloseBtn.addEventListener('click', closeHiwModal);
 if (hiwModal) {
-  hiwModal.addEventListener('click', (e) => {
-    if (e.target === hiwModal) hiwModal.classList.remove('active');
-  });
+  hiwModal.addEventListener('click', (e) => { if (e.target === hiwModal) closeHiwModal(); });
 }
-if (btnHeroStartFocus) {
-  btnHeroStartFocus.addEventListener('click', () => {
-    startHeroFocusSession();
-  });
-}
-
-vidSwitches.forEach(btn => {
-  btn.addEventListener('click', () => {
-    const vidId = parseInt(btn.dataset.vid, 10);
-    activateSlot(vidId);
-
-    // Update active button state
-    vidSwitches.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-
-    // Update hero copy based on selected vibe
-    if (heroTitle && heroSubtitle && HERO_VIBES[vidId]) {
-      heroTitle.innerHTML = HERO_VIBES[vidId].title;
-      heroSubtitle.innerHTML = HERO_VIBES[vidId].subtext;
-    }
-
-    // Handle dark mode for "Deep Woods" (index 2)
-    if (vidId === 2) {
-      heroContent.classList.remove('theme-light');
-      heroContent.classList.add('theme-dark');
-    } else {
-      heroContent.classList.remove('theme-dark');
-      heroContent.classList.add('theme-light');
-    }
-  });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && hiwModal && hiwModal.classList.contains('active')) closeHiwModal();
 });
 
-if (heroMobileMenuBtn) {
-  heroMobileMenuBtn.addEventListener('click', () => {
-    const isOpen = heroMobileMenuBtn.classList.contains('open');
-    if (isOpen) {
-      heroMobileMenuBtn.classList.remove('open');
-      heroMobileMenu.style.display = 'none';
-    } else {
-      heroMobileMenuBtn.classList.add('open');
-      heroMobileMenu.style.display = 'block';
-    }
-  });
+// ── Scene video: loops over the still plate (skipped for reduced motion) ──
+function playHeroVideo() {
+  if (!lpVideo || prefersReducedMotion) return;
+  if (!lpVideo.src && lpVideo.dataset.src) {
+    lpVideo.src = lpVideo.dataset.src;
+    lpVideo.addEventListener('playing', () => lpVideo.classList.add('is-playing'), { once: true });
+  }
+  lpVideo.muted = true;
+  const p = lpVideo.play();
+  if (p && p.catch) p.catch(() => {});
 }
-
-// ── Keep ALL hero videos playing ──
-function forcePlayAllHeroVideos() {
-  const allVids = document.querySelectorAll('.hero-video');
-  allVids.forEach(vid => {
-    vid.muted = true;
-    if (vid.paused) vid.play().catch(() => {});
-  });
+function pauseHeroVideo() {
+  if (lpVideo && !lpVideo.paused) lpVideo.pause();
 }
+function syncHeroVideo() {
+  const heroActive = screens.hero && screens.hero.classList.contains('active');
+  if (heroActive && !document.hidden) playHeroVideo(); else pauseHeroVideo();
+}
+document.addEventListener('visibilitychange', syncHeroVideo);
+// Strict autoplay browsers: retry on first interaction
+document.addEventListener('pointerdown', syncHeroVideo, { once: true });
+syncHeroVideo();
 
-// Re-play when tab becomes visible again (browser pauses background tabs)
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) forcePlayAllHeroVideos();
-});
+// ── Entrance: one Web Animations timeline, run once ──
+function runHeroEntrance() {
+  const root = document.documentElement;
+  if (!lpRoot || !root.classList.contains('lp-js')) return;
+  const reveal = () => root.classList.remove('lp-js');
+  if (prefersReducedMotion || typeof lpRoot.animate !== 'function') { reveal(); return; }
 
-// First user interaction fallback for strict autoplay browsers
-document.addEventListener('click', forcePlayAllHeroVideos, { once: true });
-document.addEventListener('touchstart', forcePlayAllHeroVideos, { once: true });
+  const u = lpRoot.getBoundingClientRect().width / 1440 || 1;
+  const px = n => `${(n * u).toFixed(2)}px`;
+  const spring = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
+  const outExpo = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  const steps = [];
+  const add = (el, keyframes, opts) => { if (el) steps.push([el, keyframes, opts]); };
+  const q = sel => lpRoot.querySelector(sel);
+  const qa = sel => Array.from(lpRoot.querySelectorAll(sel));
+
+  // 1. Logo, nav and the top CTA drop in
+  [q('.lp-logo'), q('.lp-navpill'), q('.lp-cta-top')].forEach((el, i) => add(el,
+    [{ opacity: 0, transform: `translateY(${px(-22)})` }, { opacity: 1, transform: 'translateY(0)' }],
+    { delay: 80 + i * 70, duration: 700, easing: outExpo }));
+
+  // 2. Kicker un-blurs
+  add(q('.lp-kicker'),
+    [{ opacity: 0, filter: 'blur(12px)' }, { opacity: 1, filter: 'blur(0px)' }],
+    { delay: 320, duration: 800, easing: 'ease-out' });
+
+  // 3. Headline lines spring up out of a blur, 0.16s apart
+  qa('.lp-line').forEach((el, i) => add(el,
+    [{ opacity: 0, transform: `translateY(${px(46)}) scale(0.96)`, filter: 'blur(10px)' },
+     { opacity: 1, transform: 'translateY(0) scale(1)', filter: 'blur(0px)' }],
+    { delay: 520 + i * 160, duration: 900, easing: spring }));
+
+  // 4. Then the subline, both buttons, the vibes title + link and the cards rise in turn
+  const rising = [q('.lp-sub'), ...qa('.lp-actions > *'), q('.lp-vibes-title'), q('.lp-vibes-link'), ...qa('.lp-card')];
+  rising.forEach((el, i) => add(el,
+    [{ opacity: 0, transform: `translateY(${px(26)})` }, { opacity: 1, transform: 'translateY(0)' }],
+    { delay: 980 + i * 90, duration: 750, easing: outExpo }));
+
+  // fill:'backwards' holds the first frame through each delay; afterwards the
+  // element falls back to its own CSS, so hover transforms keep working.
+  steps.forEach(([el, kf, opts]) => el.animate(kf, { ...opts, fill: 'backwards' }));
+  reveal();
+}
+runHeroEntrance();
 
 /* ══════════════════════════════════════════════════════════
    Screen Transition
@@ -507,19 +322,8 @@ function goTo(name, zoomExit = false) {
       }
       screens[name].classList.add('active');
 
-      // Ensure the global video background and png overlays are only visible on the hero screen
-      const heroBg = document.querySelector('.hero-bg');
-      const heroOverlays = document.querySelectorAll('.hero-overlay-png');
-      
-      if (heroBg) {
-        if (name === 'hero') {
-          heroBg.style.opacity = '1';
-          heroBg.style.visibility = 'visible';
-        } else {
-          heroBg.style.opacity = '0';
-          heroBg.style.visibility = 'hidden';
-        }
-      }
+      // The hero scene video only runs while the hero is on screen
+      syncHeroVideo();
 
       // Fade back in
       requestAnimationFrame(() => {
