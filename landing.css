@@ -328,6 +328,8 @@
 }
 /* Candle art is portrait: favour the lower half so the fire's face sits above the label */
 .lp-card-art--candle img { object-position: 50% 95%; }
+/* Tree art is wide: keep the trunk and canopy in frame */
+.lp-card-art--tree img { object-position: 22% 50%; }
 .lp-card::after {
   content: '';
   position: absolute;
