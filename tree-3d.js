@@ -623,11 +623,19 @@ function frameTreeCamera(aspect) {
     treeCamera.aspect = aspect;
     const tanV = Math.tan(THREE.MathUtils.degToRad(treeCamera.fov / 2));
     const contentH = 34;  // ground line to above the crown
-    const contentW = 44;  // crown width plus some meadow
+    const contentW = aspect < 0.85 ? 30 : 44;  // crown width (+ meadow on wide screens)
     const dist = Math.max((contentH / 2) / tanV, (contentW / 2) / (tanV * aspect));
     const target = new THREE.Vector3(0, 13, 0);
     treeCamera.position.set(0, target.y + dist * 0.12, dist);
     treeCamera.lookAt(target);
+    // Phones (portrait): lift the subject a little so it sits clear of the
+    // HUD and the home indicator at the bottom of the screen
+    if (aspect < 0.85) {
+        const vw = 1000 * aspect;
+        treeCamera.setViewOffset(vw, 1000, 0, 80, vw, 1000);
+    } else if (treeCamera.view && treeCamera.view.enabled) {
+        treeCamera.clearViewOffset();
+    }
     treeCamera.updateProjectionMatrix();
 }
 

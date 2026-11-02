@@ -3522,3 +3522,21 @@ body:has(#screen-hero.active):not(:has(#how-it-works-modal.active)) .global-link
 }
 
 
+
+/* ══════════════════════════════════════════════════════════
+   Mobile polish — completion visual & safe areas
+   (overrides the earlier fixed 200×200 square, which cropped and
+   shrank the 4:3 scenes)
+══════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .hero-visual {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 420px !important;
+    aspect-ratio: 4 / 3;
+    margin: 0 auto 1.25rem auto !important;
+  }
+  .focus-hud {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}

@@ -504,6 +504,14 @@ function frameBowlCamera(time, isCeremony) {
         target.z + Math.cos(yaw) * Math.cos(elev) * dist
     );
     cam.lookAt(target);
+    // Phones (portrait): lift the subject a little so it sits clear of the
+    // HUD and the home indicator at the bottom of the screen
+    if (aspect < 0.85) {
+        const vw = 1000 * aspect;
+        cam.setViewOffset(vw, 1000, 0, 80, vw, 1000);
+    } else if (cam.view && cam.view.enabled) {
+        cam.clearViewOffset();
+    }
 }
 
 function renderWaterBowl3D(progress = 0, time = 0, isCeremony = false, totalSeconds = 60) {
