@@ -761,7 +761,7 @@ function tickFocus(now) {
 
   // HUD
   const remaining = Math.max(0, state.totalSeconds - elapsed);
-  const timeStr = fmt(remaining);
+  const timeStr = fmt(Math.ceil(remaining - 1e-6));
   hudTime.textContent = timeStr;
   hudFill.style.width = (prog * 100).toFixed(2) + '%';
   hudFill.setAttribute('aria-valuenow', Math.round(prog * 100));
