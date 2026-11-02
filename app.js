@@ -390,6 +390,7 @@ document.querySelectorAll('.vibe-card').forEach(card => {
 
   card.addEventListener('click', () => {
     state.vibe = card.dataset.vibe;
+    preloadAmbient(state.vibe);
     vibeLabel.textContent = card.querySelector('.vibe-name').textContent.toUpperCase();
     // Reset duration selection
     document.querySelectorAll('.dur-pill').forEach(p => p.classList.remove('selected'));
@@ -2735,86 +2736,169 @@ function tickConfetti() {
 
 /* ==============================================================
    AUDIO — Premium Ambient Soundscapes (file-based)
-     Rain (Water Bowl) -> sounds/rain.wav
-     Fire (Candle)     -> sounds/fire.wav
-     Wind (Tree)       -> sounds/wind.wav
+     Water Bowl -> discrete drop sounds (sounds/floraphonic-…mp3)
+     Candle     -> sounds/fire.mp3
+     Tree       -> sounds/wind.mp3
+     Gallery    -> sounds/slow-piano-music.mp3
 ============================================================== */
-const audioBuffers = {};
+const AMBIENT_SRC = {
+  ice: '',                                  // discrete drop sounds instead
+  candle: 'sounds/fire.mp3',
+  tree: 'sounds/wind.mp3',
+  gallery: 'sounds/slow-piano-music.mp3',
+};
+const DROP_SRC = 'sounds/floraphonic-water-droplet-3-165638.mp3';
+
+const audioBuffers = {};        // decoded (and loop-prepared) buffers by src
+const audioLoads = {};          // in-flight load promises by src
 let audioCtxUnlocked = false;
+let ambientToken = 0;           // bumps on every start/stop so stale loads never play
+
+// iOS: let Web Audio play even when the ringer/silent switch is on (Safari 17+)
+try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
 
 function initAudioCtx() {
   if (!state.audioCtx) {
     state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Recover after interruptions (calls, Siri, other apps taking audio)
+    state.audioCtx.onstatechange = () => {
+      if (state.audioCtx.state !== 'running' && state.soundOn && isSessionAudible()) resumeAudio();
+    };
   }
-  if (state.audioCtx.state === 'suspended') {
-    state.audioCtx.resume();
+  if (state.audioCtx.state !== 'running') {
+    state.audioCtx.resume().catch(() => {});
   }
 }
 
-// iOS/Mobile Safari strict audio policy requires playing a silent buffer on first interaction
+function isSessionAudible() {
+  return !!(screens.focus && screens.focus.classList.contains('active'));
+}
+
+function resumeAudio() {
+  if (!state.audioCtx) return;
+  if (state.audioCtx.state !== 'running') state.audioCtx.resume().catch(() => {});
+}
+
+// Older iOS routes Web Audio through the "ambient" category, which the
+// silent switch mutes. Playing a looping silent media element inside a user
+// gesture switches the page to the "playback" category.
+let silentEl = null;
+function startSilentKeepAlive() {
+  if (silentEl || navigator.audioSession) return;
+  try {
+    const sr = 8000, n = sr; // 1 s of silence, 8-bit mono WAV
+    const buf = new ArrayBuffer(44 + n);
+    const v = new DataView(buf);
+    const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    w(36, 'data'); v.setUint32(40, n, true);
+    for (let i = 0; i < n; i++) v.setUint8(44 + i, 128);
+    silentEl = new Audio(URL.createObjectURL(new Blob([buf], { type: 'audio/wav' })));
+    silentEl.loop = true;
+    silentEl.setAttribute('playsinline', '');
+    silentEl.play().catch(() => { silentEl = null; });
+  } catch (_) { silentEl = null; }
+}
+
+// Mobile browsers require audio to be started from a user gesture. Play a
+// one-sample buffer on the first interaction (and again if still locked).
 function unlockAudioCtx() {
-  if (audioCtxUnlocked) return;
   initAudioCtx();
+  startSilentKeepAlive();
+  if (audioCtxUnlocked && state.audioCtx.state === 'running') return;
   const ctx = state.audioCtx;
-  
-  const buffer = ctx.createBuffer(1, 1, 22050);
   const source = ctx.createBufferSource();
-  source.buffer = buffer;
+  source.buffer = ctx.createBuffer(1, 1, 22050);
   source.connect(ctx.destination);
   source.start(0);
-  
-  if (ctx.state === 'suspended') {
-    ctx.resume().then(() => { audioCtxUnlocked = true; }).catch(e => console.warn(e));
-  } else {
-    audioCtxUnlocked = true;
-  }
-  
-  // Preload drop sound to ensure perfect timing
+  ctx.resume().then(() => { audioCtxUnlocked = ctx.state === 'running'; }).catch(() => {});
   preloadDropSound();
 }
 
-// Bind unlock to the first user interaction anywhere on the document
-['touchstart', 'click'].forEach(event => {
-  document.body.addEventListener(event, unlockAudioCtx, { once: true, capture: true });
+// Keep trying on interactions until the context is actually running
+['pointerdown', 'touchend', 'click', 'keydown'].forEach(evt => {
+  document.addEventListener(evt, () => {
+    if (!state.audioCtx || state.audioCtx.state !== 'running') unlockAudioCtx();
+  }, { capture: true, passive: true });
 });
 
-let dropSoundPromise = null;
-async function preloadDropSound() {
-  if (dropSoundPromise) return dropSoundPromise;
-  
-  const src = 'sounds/floraphonic-water-droplet-3-165638.mp3';
-  if (audioBuffers[src]) return audioBuffers[src];
-  
-  dropSoundPromise = (async () => {
-    try {
-      initAudioCtx();
-      const ctx = state.audioCtx;
-      const response = await fetch(src);
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = await ctx.decodeAudioData(arrayBuffer);
-      audioBuffers[src] = buffer;
-      return buffer;
-    } catch (e) {
-      console.error('Failed to load drop audio:', e);
-      return null;
+// Coming back to the tab / app: resume, and restart the ambience if it was lost
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !state.soundOn || !isSessionAudible()) return;
+  resumeAudio();
+  if (!state.audioNodes.ambientSource && AMBIENT_SRC[state.vibe]) startAmbient(state.vibe);
+});
+window.addEventListener('pageshow', () => { if (state.soundOn && isSessionAudible()) resumeAudio(); });
+
+// Build a seamless loop: crossfade the tail into the head once, so the
+// buffer can loop natively (no timers — those get throttled in background
+// tabs and Picture-in-Picture, which used to leave the ambience silent).
+function makeLoopBuffer(ctx, buffer, fadeSec) {
+  const fade = Math.min(Math.floor(fadeSec * buffer.sampleRate), Math.floor(buffer.length / 3));
+  if (fade < 64) return buffer;
+  const len = buffer.length - fade;
+  const out = ctx.createBuffer(buffer.numberOfChannels, len, buffer.sampleRate);
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const src = buffer.getChannelData(c);
+    const dst = out.getChannelData(c);
+    dst.set(src.subarray(0, len));
+    for (let i = 0; i < fade; i++) {
+      const t = i / fade;
+      // equal-power: head fades in while the tail fades out over it
+      dst[i] = src[i] * Math.sin(t * Math.PI / 2) + src[len + i] * Math.cos(t * Math.PI / 2);
     }
+  }
+  return out;
+}
+
+function loadAudio(src, loop) {
+  const key = src + (loop ? '#loop' : '');
+  if (audioBuffers[key]) return Promise.resolve(audioBuffers[key]);
+  if (audioLoads[key]) return audioLoads[key];
+  initAudioCtx();
+  const ctx = state.audioCtx;
+  audioLoads[key] = (async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(src);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.arrayBuffer();
+        // Safari's decodeAudioData has a callback-only form on older versions
+        let buf = await new Promise((resolve, reject) => {
+          const p = ctx.decodeAudioData(data, resolve, reject);
+          if (p && p.then) p.then(resolve, reject);
+        });
+        if (loop) buf = makeLoopBuffer(ctx, buf, 2.0);
+        audioBuffers[key] = buf;
+        return buf;
+      } catch (e) {
+        console.warn('Audio load failed (attempt ' + (attempt + 1) + '):', src, e);
+        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+      }
+    }
+    delete audioLoads[key];
+    return null;
   })();
-  
-  return dropSoundPromise;
+  return audioLoads[key];
+}
+
+function preloadDropSound() { return loadAudio(DROP_SRC, false); }
+
+// Warm the cache as soon as a vibe is chosen so sound starts with the session
+function preloadAmbient(vibe) {
+  const src = AMBIENT_SRC[vibe];
+  if (src) loadAudio(src, true);
+  if (vibe === 'ice') preloadDropSound();
 }
 
 async function playDropSound() {
   if (!state.soundOn) return;
   initAudioCtx();
+  const buffer = await preloadDropSound();
+  if (!buffer || !state.soundOn) return;
   const ctx = state.audioCtx;
-  const src = 'sounds/floraphonic-water-droplet-3-165638.mp3';
-  
-  let buffer = audioBuffers[src];
-  if (!buffer) {
-    buffer = await preloadDropSound();
-  }
-  if (!buffer) return;
-  
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   const gain = ctx.createGain();
@@ -2825,121 +2909,66 @@ async function playDropSound() {
 }
 
 function stopAllSound() {
+  ambientToken++;
   state._loadingSrc = null;
   clearTimeout(state._audioTimer);
-  // Stop HTML Audio element (legacy fallback if any)
-  if (state._ambientAudio) {
-    state._ambientAudio.pause();
-    state._ambientAudio.src = '';
-    state._ambientAudio = null;
-  }
   if (state._fadeTimer) { clearInterval(state._fadeTimer); state._fadeTimer = null; }
-
-  // Stop any remaining Web Audio nodes
-  Object.values(state.audioNodes).forEach(n => {
-    try { n.stop && n.stop(); } catch(e) {}
-    try { n.disconnect && n.disconnect(); } catch(e) {}
-  });
+  const ctx = state.audioCtx;
+  const gain = state.audioNodes.ambientGain;
+  const src = state.audioNodes.ambientSource;
+  if (ctx && gain && src) {
+    // quick fade instead of a click
+    try {
+      gain.gain.cancelScheduledValues(ctx.currentTime);
+      gain.gain.setValueAtTime(gain.gain.value, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
+      src.stop(ctx.currentTime + 0.3);
+    } catch (e) { try { src.stop(); } catch (_) {} }
+    setTimeout(() => { try { gain.disconnect(); } catch (_) {} }, 400);
+  } else {
+    Object.values(state.audioNodes).forEach(n => {
+      try { n.stop && n.stop(); } catch (e) {}
+      try { n.disconnect && n.disconnect(); } catch (e) {}
+    });
+  }
   state.audioNodes = {};
 }
 
 function startAmbient(vibe) {
   initAudioCtx();
   stopAllSound();
-
-  let src = '';
-  if (vibe === 'ice')    src = ''; // Discrete drops used instead
-  if (vibe === 'candle') src = 'sounds/fire.wav';
-  if (vibe === 'tree')   src = 'sounds/wind.wav';
-  if (vibe === 'gallery')src = 'sounds/slow-piano-music.mp3';
-  
-  if (src) {
-    state._loadingSrc = src;
-    playAmbientFile(src);
-  }
+  const src = AMBIENT_SRC[vibe];
+  if (vibe === 'ice') preloadDropSound();
+  if (!src) return;
+  state._loadingSrc = src;
+  playAmbientFile(src, ambientToken);
 }
 
-async function playAmbientFile(src) {
-  initAudioCtx();
+async function playAmbientFile(src, token) {
+  const buffer = await loadAudio(src, true);
+  // Sound turned off, or another ambience started, while loading
+  if (!buffer || token !== ambientToken || !state.soundOn) return;
   const ctx = state.audioCtx;
-  
-  let buffer = audioBuffers[src];
-  if (!buffer) {
-    try {
-      const response = await fetch(src);
-      const arrayBuffer = await response.arrayBuffer();
-      buffer = await ctx.decodeAudioData(arrayBuffer);
-      audioBuffers[src] = buffer;
-    } catch (e) {
-      console.error('Failed to load audio:', src, e);
-      return;
-    }
-  }
-  
-  // If sound was turned off while loading, or if another sound was started
-  if (!state.soundOn || state._loadingSrc !== src) {
-     return;
-  }
+  resumeAudio();
 
-  // Master gain for overall fade in/out
   const masterGain = ctx.createGain();
   masterGain.gain.value = 0;
   masterGain.connect(ctx.destination);
-  state.audioNodes['ambientGain'] = masterGain;
 
-  // Seamless Crossfade Looper
-  const CROSSFADE_TIME = 2.0; // seconds
-  let nextStartTime = ctx.currentTime;
-  let sourceIndex = 0;
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  source.connect(masterGain);
+  source.start();
+  source.onended = () => {
+    // If the loop ever stops unexpectedly mid-session, bring it back
+    if (token === ambientToken && state.soundOn && isSessionAudible()) startAmbient(state.vibe);
+  };
 
-  function scheduleNext() {
-    if (state._loadingSrc !== src || !state.soundOn) return;
-    
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    
-    const sourceGain = ctx.createGain();
-    sourceGain.gain.value = 0;
-    
-    source.connect(sourceGain);
-    sourceGain.connect(masterGain);
-    
-    const duration = buffer.duration;
-    // if duration is too short for crossfade, adjust
-    const fadeTime = Math.min(CROSSFADE_TIME, duration / 2);
-    
-    // Fade in
-    sourceGain.gain.setValueAtTime(0, nextStartTime);
-    sourceGain.gain.linearRampToValueAtTime(1, nextStartTime + fadeTime);
-    
-    // Fade out
-    const stopTime = nextStartTime + duration;
-    sourceGain.gain.setValueAtTime(1, stopTime - fadeTime);
-    sourceGain.gain.linearRampToValueAtTime(0, stopTime);
-    
-    source.start(nextStartTime);
-    source.stop(stopTime);
-    
-    // Save to node list so we can disconnect/stop if needed
-    const nodeId = 'src_' + (sourceIndex++);
-    state.audioNodes[nodeId] = source;
-    
-    source.onended = () => {
-      try { source.disconnect(); } catch(e) {}
-      try { sourceGain.disconnect(); } catch(e) {}
-      delete state.audioNodes[nodeId];
-    };
-    
-    nextStartTime = stopTime - fadeTime;
-    
-    // Schedule next loop 2 seconds before it needs to start
-    const timeUntilNext = (nextStartTime - ctx.currentTime - 2) * 1000;
-    state._audioTimer = setTimeout(scheduleNext, Math.max(0, timeUntilNext));
-  }
-  
-  scheduleNext();
-  
-  // Fade in master smoothly
+  state.audioNodes.ambientGain = masterGain;
+  state.audioNodes.ambientSource = source;
+
+  // Fade in smoothly
   masterGain.gain.setValueAtTime(0, ctx.currentTime);
   masterGain.gain.linearRampToValueAtTime(0.85, ctx.currentTime + 3);
 }
