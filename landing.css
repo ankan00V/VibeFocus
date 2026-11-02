@@ -326,12 +326,8 @@
   object-fit: cover;
   transition: transform 0.6s var(--ease-out);
 }
-/* Candle art: a crop of the scene plate (the far valley, right side) */
-.lp-card-art--valley img {
-  object-position: 100% 62%;
-  transform-origin: 100% 62%;
-  scale: 2.6;
-}
+/* Candle art is portrait: favour the lower half so the fire's face sits above the label */
+.lp-card-art--candle img { object-position: 50% 95%; }
 .lp-card::after {
   content: '';
   position: absolute;
