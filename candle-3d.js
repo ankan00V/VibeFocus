@@ -29,7 +29,7 @@ const CANDLE3D = {
     // Dimensions (world units)
     R: 0.56,            // pillar radius
     H0: 2.35,           // fresh candle height
-    HMIN: 0.62,         // height when the session ends
+    HMIN: 0.10,         // a thin disc of wax is all that remains at 00:00
     LIP: 0.05,          // wall thickness of the rim around the melt pool
     POOL_DEPTH: 0.075,  // rim top -> liquid surface once the pool has formed
     WICK_LEN: 0.14,     // visible wick above the liquid
@@ -45,6 +45,8 @@ const CANDLE3D = {
     shared: null,           // shared uniforms
     drips: [],
     built: null,
+    outAt: null,            // wall-clock seconds when the flame went out
+    smokeMesh: null, smokeMat: null,
     lastTime: 0,
     lastProgress: 0,
     camBase: { dist: 7, fov: 30 },
@@ -149,6 +151,7 @@ const WAX_FRAGMENT = `
     uniform float uTop;       // current rim height
     uniform float uLiquidY;   // liquid surface height
     uniform float uR;
+    uniform float uRoom;      // room fill (eyes adjust once the flame is out)
     varying vec3 vWorldPos;
     varying vec3 vWorldNormal;
     varying vec2 vDrip;
@@ -199,7 +202,7 @@ const WAX_FRAGMENT = `
         vec3 keyDir = normalize(vec3(-0.65, 0.45, 0.62));
         float key = clamp((dot(N, keyDir) + 0.15) / 1.15, 0.0, 1.0);
         key = key * key;
-        vec3 ambient = albedo * (vec3(0.105, 0.092, 0.080) * key + vec3(0.012, 0.010, 0.009));
+        vec3 ambient = albedo * (vec3(0.105, 0.092, 0.080) * key + vec3(0.012, 0.010, 0.009)) * uRoom;
 
         // Warm bounce from the lit table
         float bounce = clamp(-N.y * 0.5 + 0.5, 0.0, 1.0) * exp(-P.y * 1.4);
@@ -237,6 +240,7 @@ const POOL_FRAGMENT = `
     uniform float uFlameI;
     uniform float uPoolR;
     uniform float uTime;
+    uniform float uRoom;
     varying vec3 vWorldPos;
     varying vec3 vWorldNormal;
     ${CANDLE_GLSL_COMMON}
@@ -257,6 +261,8 @@ const POOL_FRAGMENT = `
 
         // Molten wax is clear-ish and glows from the flame above it
         vec3 body = vec3(1.0, 0.56, 0.20) * (0.55 + 0.45 * (1.0 - r * r)) * uFlameI * 0.85;
+        // Room light on the wax (what remains visible once the flame is out)
+        body += vec3(0.93, 0.86, 0.74) * 0.075 * uRoom;
         // Darker meniscus where the liquid meets the solid wall
         body *= mix(1.0, 0.55, smoothstep(0.82, 1.0, r));
 
@@ -276,6 +282,7 @@ const TABLE_FRAGMENT = `
     uniform float uFlameI;
     uniform float uTop;
     uniform float uR;
+    uniform float uRoom;
     varying vec3 vWorldPos;
     varying vec3 vWorldNormal;
     ${CANDLE_GLSL_COMMON}
@@ -305,7 +312,7 @@ const TABLE_FRAGMENT = `
 
         // Faint room fill that falls off into darkness (no visible horizon)
         float fall = exp(-d * 0.35);
-        vec3 ambient = vec3(0.05, 0.043, 0.038) * fall;
+        vec3 ambient = vec3(0.05, 0.043, 0.038) * fall * uRoom;
 
         // Contact shadow at the base of the candle
         float ao = mix(0.25, 1.0, smoothstep(uR * 0.98, uR + 0.35, d));
@@ -411,6 +418,37 @@ const GLOW_FRAGMENT = `
         vec3 c = uColor * g * uIntensity;
         c += (hash12(gl_FragCoord.xy) - 0.5) / 255.0 * step(0.001, g);
         gl_FragColor = vec4(max(c, 0.0), 1.0);
+    }
+`;
+
+/* ── Smoke wisp after the flame goes out ── */
+const SMOKE_FRAGMENT = `
+    uniform float uTime;
+    uniform float uAge;
+    uniform float uStrength;
+    varying vec2 vUv;
+    ${CANDLE_GLSL_COMMON}
+
+    void main() {
+        float y = vUv.y;
+        float x = (vUv.x - 0.5) * 2.0;
+        // The ribbon rises, curls and drifts as it climbs
+        float c = sin(y * 6.0 - uTime * 1.1) * 0.10 * y
+                + sin(y * 13.0 - uTime * 1.9 + 1.3) * 0.05 * y * y
+                + (fbm(vec2(y * 2.5 - uTime * 0.45, 1.7)) - 0.5) * 0.9 * y * y;
+        float w = 0.022 + 0.24 * y * y + 0.03 * exp(-uAge * 1.5);
+        float d = abs(x - c) / w;
+        float dens = exp(-d * d * 2.2);
+        // Higher up it tears into filaments
+        float n = fbm(vec2(x * 3.5 + c * 2.0, y * 5.0 - uTime * 0.9));
+        dens *= mix(1.0, smoothstep(0.30, 0.75, n) * 1.4, smoothstep(0.12, 0.65, y));
+        // Rising front during the first seconds, soft fade at the top
+        float reach = min(1.05, 0.06 + uAge * 0.42);
+        dens *= smoothstep(reach, reach - 0.18, y);
+        dens *= (1.0 - smoothstep(0.55, 1.0, y)) * smoothstep(0.0, 0.025, y);
+        float a = clamp(dens * uStrength, 0.0, 1.0);
+        vec3 col = mix(vec3(0.58, 0.58, 0.62), vec3(0.42, 0.42, 0.46), y);
+        gl_FragColor = vec4(col, a * 0.6);
     }
 `;
 
@@ -787,6 +825,7 @@ function initCandle3D(canvas) {
         uTop: { value: CANDLE3D.H0 },
         uLiquidY: { value: CANDLE3D.H0 },
         uR: { value: CANDLE3D.R },
+        uRoom: { value: 1.0 },
         uTime: { value: 0 },
     };
     CANDLE3D.shared = shared;
@@ -866,6 +905,19 @@ function initCandle3D(canvas) {
     candleScene.add(CANDLE3D.airGlow);
     candleScene.add(CANDLE3D.coreGlow);
 
+    // ── Smoke wisp (shown once the flame goes out) ──
+    CANDLE3D.smokeMat = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uAge: { value: 0 }, uStrength: { value: 0 } },
+        vertexShader: FLAME_VERTEX,
+        fragmentShader: SMOKE_FRAGMENT,
+        transparent: true,
+        depthWrite: false,
+    });
+    CANDLE3D.smokeMesh = makeBillboard(1.0, 2.6, CANDLE3D.smokeMat, true);
+    CANDLE3D.smokeMesh.renderOrder = 6;
+    CANDLE3D.smokeMesh.visible = false;
+    candleScene.add(CANDLE3D.smokeMesh);
+
     setupDrips();
     createPuddles();
 
@@ -897,7 +949,7 @@ function frameCamera(H, isCeremony, time) {
 
     const fullMid = (CANDLE3D.H0 + 0.75) * 0.47;
     const curMid = (H + 0.75) * 0.47;
-    const targetY = fullMid + (curMid - fullMid) * 0.45;
+    const targetY = fullMid + (curMid - fullMid) * 0.6;
 
     // Slight high angle so the melt pool reads; imperceptible slow drift
     const elev = 0.17;
@@ -977,7 +1029,21 @@ function renderCandle3D(progress = 0, time = 0, isCeremony = false, totalSeconds
     const stretch = 1.0 + candleNoise1D(t * 1.3 + 2.2) * 0.035 + candleNoise1D(t * 9.0) * 0.012 * (0.4 + draught);
     const flicker = 1.0 + candleNoise1D(t * 3.1 + 5.5) * 0.03 + candleNoise1D(t * 13.0 + 1.1) * 0.02 * (0.3 + draught);
     const ignite = smooth01(0, 1, Math.min(1, t / 1.2 + 0.0001)); // soft fade-in on first frames
-    const intensity = flicker * (0.92 + 0.08 * poolForm);
+
+    // ── End of the session: the flame gutters, then goes out at exactly 00:00 ──
+    const total = Math.max(1, Number(totalSeconds) || 60);
+    const remaining = (1 - p) * total;
+    const gutterSec = Math.min(20, total * 0.08);
+    const gutter = 1 - smooth01(0, gutterSec, remaining);           // 0 → 1 over the last seconds
+    const nowS = performance.now() / 1000;
+    if (p >= 1) { if (CANDLE3D.outAt === null) CANDLE3D.outAt = nowS; }
+    else CANDLE3D.outAt = null;
+    const isOut = CANDLE3D.outAt !== null;
+    const sinceOut = isOut ? nowS - CANDLE3D.outAt : 0;
+    // Flame shrinks and sputters while guttering, collapsing in the final second
+    const sputter = 1 + candleNoise1D(t * 11.0 + 3.3) * 0.35 * gutter;
+    const life = isOut ? 0 : Math.max(0, (1 - 0.6 * Math.pow(gutter, 1.4)) * smooth01(0, 1.1, remaining) * sputter);
+    const intensity = flicker * (0.92 + 0.08 * poolForm) * Math.min(1, life);
 
     const flameBase = wickBase + 0.02;
     const shared = CANDLE3D.shared;
@@ -985,19 +1051,24 @@ function renderCandle3D(progress = 0, time = 0, isCeremony = false, totalSeconds
     shared.uTop.value = builtH;
     shared.uLiquidY.value = liquidY;
     shared.uFlameI.value = intensity * (0.85 + 0.15 * ignite);
-    shared.uFlamePos.value.set(sway * 0.35, flameBase + 0.2 * stretch, 0);
+    shared.uFlamePos.value.set(sway * 0.35, flameBase + 0.2 * stretch * Math.max(0.3, life), 0);
+    // Once the light is gone the eyes adjust a little to the dark room
+    shared.uRoom.value = 1.0 + 0.8 * smooth01(0, 4, sinceOut) * (isOut ? 1 : 0);
 
     const fm = CANDLE3D.flameMat.uniforms;
     fm.uTime.value = t;
     fm.uSway.value = sway;
     fm.uStretch.value = stretch;
-    fm.uIntensity.value = 1.35 * flicker;
+    fm.uIntensity.value = 1.35 * flicker * Math.min(1, 0.4 + 0.6 * life);
 
     // ── Camera & billboards ──
     frameCamera(H, isCeremony, t);
 
     const camYaw = Math.atan2(candleCamera.position.x, candleCamera.position.z);
     CANDLE3D.flameMesh.position.set(0, flameBase, 0);
+    CANDLE3D.flameMesh.visible = life > 0.01;
+    const fs = Math.max(0.001, Math.min(1, life));
+    CANDLE3D.flameMesh.scale.set(0.75 + 0.25 * fs, fs, 1);
     CANDLE3D.flameMesh.rotation.set(0, camYaw, 0);
     // Pivot the flame from its base so sway reads as the flame leaning, not sliding
     CANDLE3D.flameMesh.rotation.z = 0;
@@ -1005,12 +1076,40 @@ function renderCandle3D(progress = 0, time = 0, isCeremony = false, totalSeconds
     const glowCenter = new THREE.Vector3(sway * 0.3, flameBase + 0.24 * stretch, 0);
     CANDLE3D.coreGlow.position.copy(glowCenter);
     CANDLE3D.coreGlow.quaternion.copy(candleCamera.quaternion);
-    CANDLE3D.coreGlow.material.uniforms.uIntensity.value = 0.5 * flicker;
+    // After it goes out, the core glow becomes the dying ember on the wick
+    const ember = isOut ? Math.exp(-sinceOut / 2.5) : 0;
+    const wickTipY = wickBase + CANDLE3D.WICK_LEN;
+    if (isOut) {
+        CANDLE3D.coreGlow.position.set(0.024, wickTipY, 0.004);
+        CANDLE3D.coreGlow.scale.setScalar(0.22);
+    } else {
+        CANDLE3D.coreGlow.scale.setScalar(1);
+    }
+    CANDLE3D.coreGlow.visible = isOut ? ember > 0.02 : true;
+    CANDLE3D.coreGlow.material.uniforms.uIntensity.value = isOut ? 0.9 * ember : 0.5 * flicker * Math.min(1, life);
     CANDLE3D.airGlow.position.set(0, flameBase + 0.1, -0.4);
     CANDLE3D.airGlow.quaternion.copy(candleCamera.quaternion);
-    CANDLE3D.airGlow.material.uniforms.uIntensity.value = 0.15 * flicker;
+    CANDLE3D.airGlow.material.uniforms.uIntensity.value = 0.15 * flicker * Math.min(1, life);
+    CANDLE3D.airGlow.visible = !isOut;
 
-    CANDLE3D.wickTip.material.color.setRGB(1.0, 0.42 + 0.08 * flicker, 0.14);
+    if (isOut) {
+        // Glowing ember cools to charcoal
+        CANDLE3D.wickTip.material.color.setRGB(0.08 + 0.92 * ember, 0.05 + 0.33 * ember, 0.04 + 0.06 * ember);
+    } else {
+        CANDLE3D.wickTip.material.color.setRGB(1.0, 0.42 + 0.08 * flicker, 0.14);
+    }
+
+    // Smoke wisp curling up from the wick once the flame is out
+    CANDLE3D.smokeMesh.visible = isOut;
+    if (isOut) {
+        CANDLE3D.smokeMesh.position.set(0.024, wickTipY - 0.01, 0.004);
+        CANDLE3D.smokeMesh.rotation.set(0, camYaw, 0);
+        const su = CANDLE3D.smokeMat.uniforms;
+        su.uTime.value = nowS;
+        su.uAge.value = sinceOut;
+        // a thick first plume that thins to a lingering thread
+        su.uStrength.value = smooth01(0, 0.25, sinceOut) * (0.3 + 0.9 * Math.exp(-sinceOut / 5));
+    }
 
     CANDLE3D.lastTime = t;
     candleRenderer.render(candleScene, candleCamera);
@@ -1022,6 +1121,7 @@ function renderCandle3D(progress = 0, time = 0, isCeremony = false, totalSeconds
 
 function resetCandle3D() {
     CANDLE3D.lastProgress = 0;
+    CANDLE3D.outAt = null;
     CANDLE3D.lastTime = 0;
     CANDLE3D.built = null;
     for (const d of CANDLE3D.drips) {
